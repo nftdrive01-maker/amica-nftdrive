@@ -8,7 +8,7 @@ import {
   MeshBVHHelper,
   StaticGeometryGenerator,
 } from "three-mesh-bvh";
-import { GenerateMeshBVHWorker } from "@/workers/bvh/GenerateMeshBVHWorker";
+// import { GenerateMeshBVHWorker } from "@/workers/bvh/GenerateMeshBVHWorker";
 import { WorkerBase } from "@/workers/bvh/utils/WorkerBase";
 // Temp Disable : WebXR
 // import {
@@ -498,7 +498,7 @@ export class Viewer {
     statsMesh.scale.setScalar(2.5);
     igroup.add(statsMesh);
 
-    this.bvhWorker = new GenerateMeshBVHWorker();
+    // this.bvhWorker = new GenerateMeshBVHWorker();
     this.raycaster.firstHitOnly = true;
 
     // Temp Disable : WebXR
