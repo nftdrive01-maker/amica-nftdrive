@@ -1,6 +1,3 @@
-import { useAccount } from 'wagmi'
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useState } from "react";
 import { useTranslation } from 'react-i18next';
 
 export const ArbiusIntroduction = ({ open, close }: {
@@ -8,10 +5,8 @@ export const ArbiusIntroduction = ({ open, close }: {
   close: () => void;
 }) => {
   const { t } = useTranslation();
-  const { address } = useAccount();
 
-
-  if (! open) {
+  if (!open) {
     return null;
   }
 
@@ -29,23 +24,15 @@ export const ArbiusIntroduction = ({ open, close }: {
           </p>
         </div>
 
-        <div className="my-8 flex space-x-4">
-          <ConnectButton />
-        </div>
         <div className="my-8">
-          {address && (
-            <button
-              onClick={() => {
-                close();
-              }}
-              className="ml-3 inline-flex items-center rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-            >
-              {t("Continue to Amica")}
-            </button>
-          )}
-          {(!address) && (
-            <p>{t("Please connect your wallet to continue.")}</p>
-          )}
+          <button
+            onClick={() => {
+              close();
+            }}
+            className="ml-3 inline-flex items-center rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+          >
+            {t("Continue to Amica")}
+          </button>
         </div>
       </div>
     </div>
