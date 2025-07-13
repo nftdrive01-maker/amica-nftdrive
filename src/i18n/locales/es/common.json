@@ -16,11 +16,11 @@
 "Load Chat": "Cargar chat",
 "YOU": "TÚ",
 "Welcome to Amica": "Bienvenido a Amica",
-"amica_intro": "\nAmica es una interfaz de chatbot de código abierto que proporciona Emoción, visión, animaciones, acciones autoactivadas, funciones de texto a voz y voz a texto. Está diseñado para conectarse a cualquier modelo de IA. Se puede usar con cualquier modelo VRM y es muy personalizable. Incluso puedes ejecutar Amica en tu ordenador sin conexión a internet o en tu teléfono. Al iniciarse, Amica utiliza nuestro chatbot de demostración y servidor TTS. Puede tardar un tiempo en cargar el primer mensaje que envíes.
+"amica_intro": "\nAmica es una interfaz de chatbot de código abierto que proporciona Emoción, visión, animaciones, acciones autoactivadas, funciones de texto a voz y voz a texto. Está diseñado para conectarse a cualquier modelo de IA. Se puede usar con cualquier modelo>
 
 "Setup": "Configuración",
 
-"amica_setup": "Haz clic en la esquina superior izquierda de la pantalla para abrir la configuración. Puedes cambiar la voz, el mensaje del sistema de caracteres, compartir/cargar/guardar y conectar a diferentes backends o modelos del navegador. Consulta nuestra documentación para obtener instrucciones de configuración más detalladas en docs.heyamica.com",
+"amica_setup": "Haz clic en la esquina superior izquierda de la pantalla para abrir la configuración. Puedes cambiar la voz, el mensaje del sistema de caracteres, compartir/cargar/guardar y conectar a diferentes backends o modelos del navegador. Consulta nuestra docume>
 
 "Read the full documents here": "Lee la documentación completa aquí",
 
@@ -40,8 +40,8 @@
 "Character Model": "Modelo del personaje",
 "character_desc": "Selecciona el personaje que quieres interpretar; actualmente, solo Amica, por defecto, tiene todas las emociones. Carga aquí tus propios VRM.",
 "Load VRM": "Cargar VRM",
-"Chatbot Backend": "Chatbot" Backend",
-"Chatbot_Backend_desc": "Selecciona el backend del chatbot que quieres usar. Echo simplemente responde con lo que escribes y se usa para pruebas y demostraciones. Por defecto, Amica está configurado para usar nuestros servidores de demostración, lo que puede tardar un tiempo en iniciarse (durante tiempos de inactividad) o verse sobrecargado. Si responde lentamente, dale tiempo.",
+"Chatbot Backend": "Chatbot Backend",
+"Chatbot_Backend_desc": "Selecciona el backend del chatbot que quieres usar. Echo simplemente responde con lo que escribes y se usa para pruebas y demostraciones. Por defecto, Amica está configurado para usar nuestros servidores de demostración, lo que puede tardar un >
 "Configure": "Configurar",
 "Click here to configure": "Haz clic aquí para configurar",
 "Appearance": "Apariencia",
@@ -73,7 +73,7 @@
 "STT Backend": "STT Backend",
 "Whisper (OpenAI)": "Whisper (OpenAI)",
 "Whisper.cpp": "Whisper.cpp",
-"Wake Word": "Activar" Word",
+"Wake Word": "Activar Word",
 "Reset to Default": "Restablecer valores predeterminados",
 "community_desc": "Únete a la comunidad de Amica para conectar con otros que exploran esta tecnología.",
 "Telegram": "Telegram",
@@ -86,7 +86,7 @@
 "API Key": "Clave de API",
 "Voice ID": "ID de voz",
 "elevenLabs_desc": "Configurar ElevenLabs",
-"kobold_cpp_desc": "KoboldCpp es Un software de generación de texto con IA fácil de usar para modelos GGML y GGUF.
+"kobold_cpp_desc": "KoboldCpp es Un software de generación de texto con IA fácil de usar para modelos GGML y GGUF.",
 "API URL": "API URL",
 "llama.cpp": "llama.cpp",
 "llama_cpp_desc": "LLama.cpp es un backend de chatbot gratuito y de código abierto. Debes compilar el servidor desde el código fuente y ejecutarlo en tu propio ordenador. Puedes obtener el código fuente desde",
@@ -103,9 +103,9 @@
 "STT": "STT",
 "STT_desc": "Seleccionar el backend de STT a usar",
 "System_Prompt_desc": "Configurar el mensaje del sistema. Este es el mensaje que se utiliza para generar la respuesta del chatbot",
-"TTS_Backend_desc": "Seleccionar el backend de TTS a usar. Por defecto, está configurado en nuestro servidor de TTS. Elevenlabs es un servicio de pago con la mejor voz, pero es gratuito para uso no comercial. SpeechT5 es>
+"TTS_Backend_desc": "Seleccionar el backend de TTS a usar. Por defecto, está configurado en nuestro servidor de TTS. Elevenlabs es un servicio de pago con la mejor voz, pero es gratuito para uso no comercial. SpeechT5 es>",
 "Vision_Backend_desc": "Seleccionar el backend de Vision a usar",
-"Vision_System_Prompt_desc": "Configurar el mensaje del sistema de visión". Este es el mensaje que se utiliza para generar las descripciones de las imágenes.
+"Vision_System_Prompt_desc": "Configurar el mensaje del sistema de visión. Este es el mensaje que se utiliza para generar las descripciones de las imágenes.",
 
 "Whisper_cpp_desc": "Configurar Whisper.cpp",
 
@@ -130,14 +130,13 @@
 "Description": "Descripción",
 
 "Vision System Prompt": "Mensaje del sistema de visión",
-
 "Background Url": "URL de fondo",
 
 "Youtube Video Id": "ID del vídeo de YouTube",
 
 "VRM Url": "URL de VRM",
 
-Animation Url: "Animación" Url",
+"Animation Url": "Animación Url",
 "Voice Url": "URL de voz",
 "Upload VRM": "Subir VRM",
 "VRM upload message": "El VRM de este personaje se guarda localmente",
