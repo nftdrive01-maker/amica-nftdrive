@@ -96,4 +96,77 @@
 "ollama.ai": "ollama.ai",
 "Model": "Modelo",
 "OpenAI TTS": "OpenAI TTS",
-"OpenAI_tts_desc": "Configurar Op
+"OpenAI_tts_desc": "Configurar OpenAI TTS",
+"Voice": "Voz",
+"Reset All Settings": "Restablecer todos los ajustes",
+"SpeechT5_desc": "Configurar SpeechT5",
+"STT": "STT",
+"STT_desc": "Seleccionar el backend de STT a usar",
+"System_Prompt_desc": "Configurar el mensaje del sistema. Este es el mensaje que se utiliza para generar la respuesta del chatbot",
+"TTS_Backend_desc": "Seleccionar el backend de TTS a usar. Por defecto, está configurado en nuestro servidor de TTS. Elevenlabs es un servicio de pago con la mejor voz, pero es gratuito para uso no comercial. SpeechT5 es>
+"Vision_Backend_desc": "Seleccionar el backend de Vision a usar",
+"Vision_System_Prompt_desc": "Configurar el mensaje del sistema de visión". Este es el mensaje que se utiliza para generar las descripciones de las imágenes.
+
+"Whisper_cpp_desc": "Configurar Whisper.cpp",
+
+"URL": "URL",
+
+"Whisper_OpenAI_desc": "Configurar Whisper (OpenAI)",
+
+"OpenAI URL": "URL de OpenAI",
+
+"Error!": "¡Error!",
+
+"Something went wrong.": "Algo salió mal.",
+
+"Try again later.": "Inténtalo de nuevo más tarde.",
+
+"Click here": "Haz clic aquí",
+
+"to return to homepage.": "Para volver a la página principal.",
+
+"Import": "Importar",
+
+"Description": "Descripción",
+
+"Vision System Prompt": "Mensaje del sistema de visión",
+
+"Background Url": "URL de fondo",
+
+"Youtube Video Id": "ID del vídeo de YouTube",
+
+"VRM Url": "URL de VRM",
+
+Animation Url: "Animación" Url",
+"Voice Url": "URL de voz",
+"Upload VRM": "Subir VRM",
+"VRM upload message": "El VRM de este personaje se guarda localmente",
+"VRM local share message": "Para compartir este personaje, debes subir el VRM al servidor",
+"Import character": "Importar personaje",
+"Wrong place?": "¿Lugar equivocado?",
+"Go home": "Ir a inicio",
+"Please enter the code you received from the share page": "Introduce el código que recibiste de la página para compartir",
+"Code": "Código",
+"Provide a description of the character": "Proporciona una descripción del personaje",
+"Background URL": "URL de fondo",
+"Example": "Ejemplo",
+"Save Character": "Guardar personaje",
+"Share this code (click to copy):": "Comparte este código (click to copy):",
+"Or, you can share this direct link:": "O puedes compartir este enlace directo:",
+"Conversación": "Conversación",
+"Depurar": "Depurar",
+"Importar Carácter": "Importar Carácter",
+"Copiar URL": "Copiar URL",
+"Vista Previa": "Vista Previa",
+"Ninguno": "Ninguno",
+"Conversión de Voz a Texto": "Conversión de Voz a Texto",
+"Establecer tiempo antes de que el bot se inactive": "Establecer tiempo antes de que el bot se inactive",
+"tiempo antes de que el bot se inactive": "tiempo antes de que el bot se inactive",
+"Palabra de Activación": "Palabra de Activación",
+"Especificar": "Especificar",
+"seg": "seg",
+"Usar": "Usar",
+"Establecer": "Establecer",
+"Habilitado": "Habilitado",
+"STOP SECUENCIA": "STOP SECUENCIA"
+}
