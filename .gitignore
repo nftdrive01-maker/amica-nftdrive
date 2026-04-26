@@ -41,3 +41,5 @@ working/*
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+amica.code-workspace
