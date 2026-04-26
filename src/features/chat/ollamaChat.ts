@@ -6,7 +6,7 @@ export async function getOllamaChatResponseStream(messages: Message[]) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const res = await fetch(`${config("ollama_url")}/api/chat`, {
+  const res = await fetch(`/api/chat`, {
     headers: headers,
     method: "POST",
     body: JSON.stringify({
@@ -67,7 +67,7 @@ export async function getOllamaVisionChatResponse(messages: Message[], imageData
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const res = await fetch(`${config("vision_ollama_url")}/api/chat`, {
+  const res = await fetch(`/api/chat`, {
     headers: headers,
     method: "POST",
     body: JSON.stringify({

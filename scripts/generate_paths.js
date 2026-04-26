@@ -2,7 +2,7 @@ const fs = require('fs');
 const fg = require('fast-glob');
 const path = require('path');
 
-const ROOT = path.join(__dirname, './../public');
+const ROOT = path.join(__dirname, './../public').replace(/\\/g, '/');
 
 const bgImages = fg.globSync(ROOT+"/bg/**/bg-*.jpg", {dot: true}).map((p) => p.split(ROOT)[1]);
 const vrmList = fg.globSync(ROOT+"/vrm/**/*.vrm", {dot: true}).map((p) => p.split(ROOT)[1]);

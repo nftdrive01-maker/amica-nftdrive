@@ -2,12 +2,17 @@ import en from "./locales/en/common.json";
 import zh from "./locales/zh/common.json";
 import de from "./locales/de/common.json";
 import ka from "./locales/ka/common.json";
+import ja from "./locales/ja/common.json";
 
 // const langs: any = Object.entries({en, zh}).reduce((arr, [key, value]) => {
 //     return {...arr, [key] : { translation: value} }
 //   }, {});
 
 export const langs: any = {
+  ja: {
+    nativeName: '日本語',
+    translation: ja,
+  },
   en: {
     nativeName: 'English',
     translation: en,

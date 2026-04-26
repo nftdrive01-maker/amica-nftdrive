@@ -5,6 +5,10 @@ declare namespace NodeJS {
     NEXT_PUBLIC_OPENROUTER_URL?: string;
     NEXT_PUBLIC_OPENROUTER_MODEL?: string;
 
+    // StyleBertVits2 Configuration
+    NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL?: string;
+
+
     // Existing environment variables (preserving for type safety)
     NEXT_PUBLIC_CHATBOT_BACKEND?: string;
     NEXT_PUBLIC_OPENAI_APIKEY?: string;

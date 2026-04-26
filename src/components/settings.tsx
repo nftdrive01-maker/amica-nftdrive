@@ -73,6 +73,7 @@ import { useVrmStoreContext } from "@/features/vrmStore/vrmStoreContext";
 import { OpenRouterSettings } from "./settings/OpenRouterSettingsPage";
 import { ExternalAPIPage } from "./settings/ExternalAPIPage";
 import { KokoroSettingsPage } from "./settings/KokoroSettingsPage";
+import { StyleBertVits2SettingsPage } from "./settings/StyleBertVits2SettingsPage";
 
 
 export const Settings = ({
@@ -139,6 +140,10 @@ export const Settings = ({
   const [kokoroUrl, setKokoroUrl] = useState(config("kokoro_url"));
   const [kokoroVoice, setKokoroVoice] = useState(config("kokoro_voice"));
 
+  const [stylebertvits2ServerUrl, setStylebertvits2ServerUrl] = useState(config("stylebertvits2_server_url"));
+  const [stylebertvits2ModelId, setStylebertvits2ModelId] = useState(config("stylebertvits2_model_id"));
+  const [stylebertvits2Style, setStylebertvits2Style] = useState(config("stylebertvits2_style"));
+
   const [visionBackend, setVisionBackend] = useState(config("vision_backend"));
   const [visionLlamaCppUrl, setVisionLlamaCppUrl] = useState(config("vision_llamacpp_url"));
   const [visionOllamaUrl, setVisionOllamaUrl] = useState(config("vision_ollama_url"));
@@ -160,23 +165,23 @@ export const Settings = ({
   const [sttBackend, setSTTBackend] = useState(config("stt_backend"));
   const [sttWakeWordEnabled, setSTTWakeWordEnabled] = useState<boolean>(config("wake_word_enabled") === 'true' ? true : false);
   const [sttWakeWord, setSTTWakeWord] = useState(config("wake_word"));
-  
+
   const [whisperOpenAIUrl, setWhisperOpenAIUrl] = useState(config("openai_whisper_url"));
   const [whisperOpenAIApiKey, setWhisperOpenAIApiKey] = useState(config("openai_whisper_apikey"));
   const [whisperOpenAIModel, setWhisperOpenAIModel] = useState(config("openai_whisper_model"));
   const [whisperCppUrl, setWhisperCppUrl] = useState(config("whispercpp_url"));
 
-  const [amicaLifeEnabled,setAmicaLifeEnabled] = useState<boolean>(config("amica_life_enabled") === 'true' ? true : false);
+  const [amicaLifeEnabled, setAmicaLifeEnabled] = useState<boolean>(config("amica_life_enabled") === 'true' ? true : false);
   const [timeBeforeIdle, setTimeBeforeIdle] = useState<number>(parseInt(config("time_before_idle_sec")));
-  const [minTimeInterval,setMinTimeInterval] = useState<number>(parseInt(config("min_time_interval_sec")));
+  const [minTimeInterval, setMinTimeInterval] = useState<number>(parseInt(config("min_time_interval_sec")));
   const [maxTimeInterval, setMaxTimeInterval] = useState<number>(parseInt(config("max_time_interval_sec")));
   const [timeToSleep, setTimeToSleep] = useState<number>(parseInt(config("time_to_sleep_sec")));
   const [idleTextPrompt, setIdleTextPrompt] = useState(config("idle_text_prompt"));
 
-  const [reasoningEngineEnabled,setReasoningEngineEnabled] = useState<boolean>(config("reasoning_engine_enabled") === 'true' ? true : false);
-  const [reasoningEngineUrl,setReasoningEngineUrl] = useState(config("reasoning_engine_url") );
+  const [reasoningEngineEnabled, setReasoningEngineEnabled] = useState<boolean>(config("reasoning_engine_enabled") === 'true' ? true : false);
+  const [reasoningEngineUrl, setReasoningEngineUrl] = useState(config("reasoning_engine_url"));
 
-  const [externalApiEnabled,setExternalApiEnabled] = useState<boolean>(config("external_api_enabled") === 'true' ? true : false);
+  const [externalApiEnabled, setExternalApiEnabled] = useState<boolean>(config("external_api_enabled") === 'true' ? true : false);
 
   const [name, setName] = useState(config("name"));
   const [systemPrompt, setSystemPrompt] = useState(config("system_prompt"));
@@ -229,13 +234,13 @@ export const Settings = ({
 
     const file_type = file.name.split(".").pop();
 
-    if (! file.type.match('image.*')) return;
+    if (!file.type.match('image.*')) return;
 
     let reader = new FileReader();
     reader.onload = (function (_) {
       return function (e) {
         const url = e.target?.result;
-        if (! url) return;
+        if (!url) return;
 
         document.body.style.backgroundImage = `url(${url})`;
 
@@ -285,10 +290,11 @@ export const Settings = ({
     speechT5SpeakerEmbeddingsUrl,
     openAITTSApiKey, openAITTSUrl, openAITTSModel, openAITTSVoice,
     piperUrl,
-    rvcUrl,rvcEnabled,rvcModelName,rvcIndexPath,rvcF0upKey,rvcF0Method,rvcIndexRate,rvcFilterRadius,,rvcResampleSr,rvcRmsMixRate,rvcProtect,
-    coquiLocalUrl,coquiLocalVoiceId,
+    rvcUrl, rvcEnabled, rvcModelName, rvcIndexPath, rvcF0upKey, rvcF0Method, rvcIndexRate, rvcFilterRadius, , rvcResampleSr, rvcRmsMixRate, rvcProtect,
+    coquiLocalUrl, coquiLocalVoiceId,
     localXTTSUrl,
     kokoroUrl, kokoroVoice,
+    stylebertvits2ModelId, stylebertvits2Style,
     visionBackend,
     visionLlamaCppUrl,
     visionOllamaUrl, visionOllamaModel,
@@ -299,7 +305,7 @@ export const Settings = ({
     sttBackend,
     whisperOpenAIApiKey, whisperOpenAIModel, whisperOpenAIUrl,
     whisperCppUrl,
-    amicaLifeEnabled ,timeBeforeIdle, minTimeInterval, maxTimeInterval, timeToSleep, idleTextPrompt,
+    amicaLifeEnabled, timeBeforeIdle, minTimeInterval, maxTimeInterval, timeToSleep, idleTextPrompt,
     reasoningEngineEnabled, reasoningEngineUrl,
     externalApiEnabled,
     name,
@@ -350,407 +356,418 @@ export const Settings = ({
   }
 
   function renderPage() {
-    switch(page) {
-    case 'main_menu':
-      return <MenuPage
-        keys={["appearance", "amica_life", "chatbot", "language", "tts", "stt", "vision", "developer", "external_api", "reset_settings", "community"]}
-        menuClick={handleMenuClick} />;
+    switch (page) {
+      case 'main_menu':
+        return <MenuPage
+          keys={["appearance", "amica_life", "chatbot", "language", "tts", "stt", "vision", "developer", "external_api", "reset_settings", "community"]}
+          menuClick={handleMenuClick} />;
 
-    case 'appearance':
-      return <MenuPage
-        keys={["background_img", "background_color", "background_video", "character_model", "character_animation"]}
-        menuClick={handleMenuClick} />;
+      case 'appearance':
+        return <MenuPage
+          keys={["background_img", "background_color", "background_video", "character_model", "character_animation"]}
+          menuClick={handleMenuClick} />;
 
-    case 'chatbot':
-      return <MenuPage
-        keys={["chatbot_backend", "name", "system_prompt", "arbius_llm_settings", "chatgpt_settings", "llamacpp_settings", "ollama_settings", "koboldai_settings", "moshi_settings", "openrouter_settings"]}
-        menuClick={handleMenuClick} />;
+      case 'chatbot':
+        return <MenuPage
+          keys={["chatbot_backend", "name", "system_prompt", "arbius_llm_settings", "chatgpt_settings", "llamacpp_settings", "ollama_settings", "koboldai_settings", "moshi_settings", "openrouter_settings"]}
+          menuClick={handleMenuClick} />;
 
-    case 'language':
-      return <LanguagePage
-        setSettingsUpdated={setSettingsUpdated}
-      />;
-
-    case 'tts':
-      return <MenuPage
-        keys={["tts_backend", "elevenlabs_settings", "speecht5_settings", "coquiLocal_settings", "openai_tts_settings", "piper_settings", "localXTTS_settings", "kokoro_settings", "rvc_settings"]}
-        menuClick={handleMenuClick} />;
-
-    case 'stt':
-      return <MenuPage
-        keys={["stt_backend", "stt_wake_word", "whisper_openai_settings", "whispercpp_settings"]}
-        menuClick={handleMenuClick} />;
-
-    case 'vision':
-      return <MenuPage
-        keys={["vision_backend", "vision_llamacpp_settings", "vision_ollama_settings", "vision_openai_settings", "vision_system_prompt"]}
-        menuClick={handleMenuClick} />;
-
-    case 'reset_settings':
-      return <ResetSettingsPage />;
-
-    case 'developer':
-      return <DeveloperPage
-        debugGfx={debugGfx}
-        setDebugGfx={setDebugGfx}
-        mtoonDebugMode={mtoonDebugMode}
-        setMtoonDebugMode={setMtoonDebugMode}
-        mtoonMaterialType={mtoonMaterialType}
-        setMtoonMaterialType={setMtoonMaterialType}
-        useWebGPU={useWebGPU}
-        setUseWebGPU={setUseWebGPU}
-        setSettingsUpdated={setSettingsUpdated}
-      />;
-
-    case 'community':
-      return <CommunityPage />
-
-    case 'background_img':
-      return <BackgroundImgPage
-        bgUrl={bgUrl}
-        setBgUrl={setBgUrl}
-        setSettingsUpdated={setSettingsUpdated}
-        handleClickOpenBgImgFile={handleClickOpenBgImgFile}
-        />
-
-    case 'background_color':
-      return <BackgroundColorPage
-        bgColor={bgColor}
-        setBgColor={setBgColor}
-        setSettingsUpdated={setSettingsUpdated}
-        />
-
-    case 'background_video':
-      return <BackgroundVideoPage
-        youtubeVideoID={youtubeVideoID}
-        setYoutubeVideoID={setYoutubeVideoID}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'language':
+        return <LanguagePage
+          setSettingsUpdated={setSettingsUpdated}
         />;
 
-    case 'character_model':
-      return <CharacterModelPage
-        viewer={viewer}
-        vrmHash={vrmHash}
-        vrmUrl={vrmUrl}
-        vrmSaveType={vrmSaveType}
-        vrmList={vrmList}
-        setVrmHash={setVrmHash}
-        setVrmUrl={setVrmUrl}
-        setVrmSaveType={setVrmSaveType}
-        setSettingsUpdated={setSettingsUpdated}
-        handleClickOpenVrmFile={handleClickOpenVrmFile}
+      case 'tts':
+        return <MenuPage
+          keys={["tts_backend", "elevenlabs_settings", "speecht5_settings", "coquiLocal_settings", "openai_tts_settings", "piper_settings", "localXTTS_settings", "kokoro_settings", "rvc_settings", "stylebertvits2_settings"]}
+          menuClick={handleMenuClick} />;
+
+      case 'stt':
+        return <MenuPage
+          keys={["stt_backend", "stt_wake_word", "whisper_openai_settings", "whispercpp_settings"]}
+          menuClick={handleMenuClick} />;
+
+      case 'vision':
+        return <MenuPage
+          keys={["vision_backend", "vision_llamacpp_settings", "vision_ollama_settings", "vision_openai_settings", "vision_system_prompt"]}
+          menuClick={handleMenuClick} />;
+
+      case 'reset_settings':
+        return <ResetSettingsPage />;
+
+      case 'developer':
+        return <DeveloperPage
+          debugGfx={debugGfx}
+          setDebugGfx={setDebugGfx}
+          mtoonDebugMode={mtoonDebugMode}
+          setMtoonDebugMode={setMtoonDebugMode}
+          mtoonMaterialType={mtoonMaterialType}
+          setMtoonMaterialType={setMtoonMaterialType}
+          useWebGPU={useWebGPU}
+          setUseWebGPU={setUseWebGPU}
+          setSettingsUpdated={setSettingsUpdated}
+        />;
+
+      case 'community':
+        return <CommunityPage />
+
+      case 'background_img':
+        return <BackgroundImgPage
+          bgUrl={bgUrl}
+          setBgUrl={setBgUrl}
+          setSettingsUpdated={setSettingsUpdated}
+          handleClickOpenBgImgFile={handleClickOpenBgImgFile}
         />
 
-    case 'character_animation':
-      return <CharacterAnimationPage
-        viewer={viewer}
-        animationUrl={animationUrl}
-        setAnimationUrl={setAnimationUrl}
-        animationProcedural={animationProcedural}
-        setAnimationProcedural={setAnimationProcedural}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'background_color':
+        return <BackgroundColorPage
+          bgColor={bgColor}
+          setBgColor={setBgColor}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'chatbot_backend':
-      return <ChatbotBackendPage
-        chatbotBackend={chatbotBackend}
-        setChatbotBackend={setChatbotBackend}
-        setSettingsUpdated={setSettingsUpdated}
-        setPage={setPage}
-        breadcrumbs={breadcrumbs}
-        setBreadcrumbs={setBreadcrumbs}
+      case 'background_video':
+        return <BackgroundVideoPage
+          youtubeVideoID={youtubeVideoID}
+          setYoutubeVideoID={setYoutubeVideoID}
+          setSettingsUpdated={setSettingsUpdated}
+        />;
+
+      case 'character_model':
+        return <CharacterModelPage
+          viewer={viewer}
+          vrmHash={vrmHash}
+          vrmUrl={vrmUrl}
+          vrmSaveType={vrmSaveType}
+          vrmList={vrmList}
+          setVrmHash={setVrmHash}
+          setVrmUrl={setVrmUrl}
+          setVrmSaveType={setVrmSaveType}
+          setSettingsUpdated={setSettingsUpdated}
+          handleClickOpenVrmFile={handleClickOpenVrmFile}
         />
 
-    case 'arbius_llm_settings':
-      return <ArbiusLLMSettingsPage
-        arbiusLLMModelId={arbiusLLMModelId}
-        setArbiusLLMModelId={setArbiusLLMModelId}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'character_animation':
+        return <CharacterAnimationPage
+          viewer={viewer}
+          animationUrl={animationUrl}
+          setAnimationUrl={setAnimationUrl}
+          animationProcedural={animationProcedural}
+          setAnimationProcedural={setAnimationProcedural}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'chatgpt_settings':
-      return <ChatGPTSettingsPage
-        openAIApiKey={openAIApiKey}
-        setOpenAIApiKey={setOpenAIApiKey}
-        openAIUrl={openAIUrl}
-        setOpenAIUrl={setOpenAIUrl}
-        openAIModel={openAIModel}
-        setOpenAIModel={setOpenAIModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'chatbot_backend':
+        return <ChatbotBackendPage
+          chatbotBackend={chatbotBackend}
+          setChatbotBackend={setChatbotBackend}
+          setSettingsUpdated={setSettingsUpdated}
+          setPage={setPage}
+          breadcrumbs={breadcrumbs}
+          setBreadcrumbs={setBreadcrumbs}
         />
 
-    case 'llamacpp_settings':
-      return <LlamaCppSettingsPage
-        llamaCppUrl={llamaCppUrl}
-        setLlamaCppUrl={setLlamaCppUrl}
-        llamaCppStopSequence={llamaCppStopSequence}
-        setLlamaCppStopSequence={setLlamaCppStopSequence}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'arbius_llm_settings':
+        return <ArbiusLLMSettingsPage
+          arbiusLLMModelId={arbiusLLMModelId}
+          setArbiusLLMModelId={setArbiusLLMModelId}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'ollama_settings':
-      return <OllamaSettingsPage
-        ollamaUrl={ollamaUrl}
-        setOllamaUrl={setOllamaUrl}
-        ollamaModel={ollamaModel}
-        setOllamaModel={setOllamaModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'chatgpt_settings':
+        return <ChatGPTSettingsPage
+          openAIApiKey={openAIApiKey}
+          setOpenAIApiKey={setOpenAIApiKey}
+          openAIUrl={openAIUrl}
+          setOpenAIUrl={setOpenAIUrl}
+          openAIModel={openAIModel}
+          setOpenAIModel={setOpenAIModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'koboldai_settings':
-      return <KoboldAiSettingsPage
-        koboldAiUrl={koboldAiUrl}
-        setKoboldAiUrl={setKoboldAiUrl}
-        koboldAiUseExtra={koboldAiUseExtra}
-        setKoboldAiUseExtra={setKoboldAiUseExtra}
-        koboldAiStopSequence={koboldAiStopSequence}
-        setKoboldAiStopSequence={setKoboldAiStopSequence}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'llamacpp_settings':
+        return <LlamaCppSettingsPage
+          llamaCppUrl={llamaCppUrl}
+          setLlamaCppUrl={setLlamaCppUrl}
+          llamaCppStopSequence={llamaCppStopSequence}
+          setLlamaCppStopSequence={setLlamaCppStopSequence}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'moshi_settings':
-      return <MoshiSettingsPage
-        moshiUrl={moshiUrl}
-        setMoshiUrl={setMoshiUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'ollama_settings':
+        return <OllamaSettingsPage
+          ollamaUrl={ollamaUrl}
+          setOllamaUrl={setOllamaUrl}
+          ollamaModel={ollamaModel}
+          setOllamaModel={setOllamaModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'openrouter_settings':
-      return <OpenRouterSettings
-        openRouterUrl={openRouterUrl}
-        setOpenRouterUrl={setOpenRouterUrl}
-        openRouterApiKey={openRouterApiKey}
-        setOpenRouterApiKey={setOpenRouterApiKey}
-        openRouterModel={openRouterModel}
-        setOpenRouterModel={setOpenRouterModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'koboldai_settings':
+        return <KoboldAiSettingsPage
+          koboldAiUrl={koboldAiUrl}
+          setKoboldAiUrl={setKoboldAiUrl}
+          koboldAiUseExtra={koboldAiUseExtra}
+          setKoboldAiUseExtra={setKoboldAiUseExtra}
+          koboldAiStopSequence={koboldAiStopSequence}
+          setKoboldAiStopSequence={setKoboldAiStopSequence}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'tts_backend':
-      return <TTSBackendPage
-        ttsBackend={ttsBackend}
-        setTTSBackend={setTTSBackend}
-        setSettingsUpdated={setSettingsUpdated}
-        setPage={setPage}
-        breadcrumbs={breadcrumbs}
-        setBreadcrumbs={setBreadcrumbs}
+      case 'moshi_settings':
+        return <MoshiSettingsPage
+          moshiUrl={moshiUrl}
+          setMoshiUrl={setMoshiUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'elevenlabs_settings':
-      return <ElevenLabsSettingsPage
-        elevenlabsApiKey={elevenlabsApiKey}
-        setElevenlabsApiKey={setElevenlabsApiKey}
-        elevenlabsVoiceId={elevenlabsVoiceId}
-        setElevenlabsVoiceId={setElevenlabsVoiceId}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'openrouter_settings':
+        return <OpenRouterSettings
+          openRouterUrl={openRouterUrl}
+          setOpenRouterUrl={setOpenRouterUrl}
+          openRouterApiKey={openRouterApiKey}
+          setOpenRouterApiKey={setOpenRouterApiKey}
+          openRouterModel={openRouterModel}
+          setOpenRouterModel={setOpenRouterModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'speecht5_settings':
-      return <SpeechT5SettingsPage
-        speechT5SpeakerEmbeddingsUrl={speechT5SpeakerEmbeddingsUrl}
-        setSpeechT5SpeakerEmbeddingsUrl={setSpeechT5SpeakerEmbeddingsUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'tts_backend':
+        return <TTSBackendPage
+          ttsBackend={ttsBackend}
+          setTTSBackend={setTTSBackend}
+          setSettingsUpdated={setSettingsUpdated}
+          setPage={setPage}
+          breadcrumbs={breadcrumbs}
+          setBreadcrumbs={setBreadcrumbs}
         />
 
-    case 'openai_tts_settings':
-      return <OpenAITTSSettingsPage
-        openAITTSApiKey={openAITTSApiKey}
-        setOpenAITTSApiKey={setOpenAITTSApiKey}
-        openAITTSUrl={openAITTSUrl}
-        setOpenAITTSUrl={setOpenAITTSUrl}
-        openAITTSModel={openAITTSModel}
-        setOpenAITTSModel={setOpenAITTSModel}
-        openAITTSVoice={openAITTSVoice}
-        setOpenAITTSVoice={setOpenAITTSVoice}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'elevenlabs_settings':
+        return <ElevenLabsSettingsPage
+          elevenlabsApiKey={elevenlabsApiKey}
+          setElevenlabsApiKey={setElevenlabsApiKey}
+          elevenlabsVoiceId={elevenlabsVoiceId}
+          setElevenlabsVoiceId={setElevenlabsVoiceId}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'piper_settings':
-      return <PiperSettingsPage
-        piperUrl={piperUrl}
-        setPiperUrl={setPiperUrl}
-        setSettingsUpdated={setSettingsUpdated}
-        />
-    
-    case 'coquiLocal_settings':
-      return <CoquiLocalSettingsPage
-        coquiLocalUrl={coquiLocalUrl}
-        coquiLocalVoiceId={coquiLocalVoiceId}
-        setCoquiLocalVoiceId={setCoquiLocalVoiceId}
-        setCoquiLocalUrl={setCoquiLocalUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'speecht5_settings':
+        return <SpeechT5SettingsPage
+          speechT5SpeakerEmbeddingsUrl={speechT5SpeakerEmbeddingsUrl}
+          setSpeechT5SpeakerEmbeddingsUrl={setSpeechT5SpeakerEmbeddingsUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'localXTTS_settings':
-      return <LocalXTTSSettingsPage
-        localXTTSUrl={localXTTSUrl}
-        setLocalXTTSUrl={setLocalXTTSUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'openai_tts_settings':
+        return <OpenAITTSSettingsPage
+          openAITTSApiKey={openAITTSApiKey}
+          setOpenAITTSApiKey={setOpenAITTSApiKey}
+          openAITTSUrl={openAITTSUrl}
+          setOpenAITTSUrl={setOpenAITTSUrl}
+          openAITTSModel={openAITTSModel}
+          setOpenAITTSModel={setOpenAITTSModel}
+          openAITTSVoice={openAITTSVoice}
+          setOpenAITTSVoice={setOpenAITTSVoice}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'kokoro_settings':
-      return <KokoroSettingsPage
-        kokoroUrl={kokoroUrl}
-        kokoroVoice={kokoroVoice}
-        setKokoroVoice={setKokoroVoice}
-        setKokoroUrl={setKokoroUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'piper_settings':
+        return <PiperSettingsPage
+          piperUrl={piperUrl}
+          setPiperUrl={setPiperUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'rvc_settings':
-      return <RVCSettingsPage
-        rvcUrl={rvcUrl}
-        rvcEnabled={rvcEnabled}
-        rvcModelName={rvcModelName}
-        rvcIndexPath={rvcIndexPath}
-        rvcF0upKey={rvcF0upKey}
-        rvcF0Method={rvcF0Method}
-        rvcIndexRate={rvcIndexRate}
-        rvcFilterRadius={rvcFilterRadius}
-        rvcResampleSr={rvcResampleSr}
-        rvcRmsMixRate={rvcRmsMixRate}
-        rvcProtect={rvcProtect}
-        setRvcUrl={setRvcUrl}
-        setRvcEnabled={setRvcEnabled}
-        setRvcModelName={setRvcModelName}
-        setRvcIndexPath={setRvcIndexPath}
-        setRvcF0upKey={setRvcF0UpKey}
-        setRvcF0Method={setRvcF0Method}
-        setRvcIndexRate={setRvcIndexRate}
-        setRvcFilterRadius={setRvcFilterRadius}
-        setRvcResampleSr={setRvcResampleSr}
-        setRvcRmsMixRate={setRvcRmsMixRate}
-        setRvcProtect={setRvcProtect}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'coquiLocal_settings':
+        return <CoquiLocalSettingsPage
+          coquiLocalUrl={coquiLocalUrl}
+          coquiLocalVoiceId={coquiLocalVoiceId}
+          setCoquiLocalVoiceId={setCoquiLocalVoiceId}
+          setCoquiLocalUrl={setCoquiLocalUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case'stt_backend':
-      return <STTBackendPage
-        sttBackend={sttBackend}
-        setSTTBackend={setSTTBackend}
-        setSettingsUpdated={setSettingsUpdated}
-        setPage={setPage}
-        breadcrumbs={breadcrumbs}
-        setBreadcrumbs={setBreadcrumbs}
+      case 'localXTTS_settings':
+        return <LocalXTTSSettingsPage
+          localXTTSUrl={localXTTSUrl}
+          setLocalXTTSUrl={setLocalXTTSUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case'stt_wake_word':
-      return <STTWakeWordSettingsPage
-        sttWakeWordEnabled={sttWakeWordEnabled}
-        sttWakeWord={sttWakeWord}
-        timeBeforeIdle={timeBeforeIdle}
-        setSTTWakeWordEnabled={setSTTWakeWordEnabled}
-        setSTTWakeWord={setSTTWakeWord}
-        setTimeBeforeIdle={setTimeBeforeIdle}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'kokoro_settings':
+        return <KokoroSettingsPage
+          kokoroUrl={kokoroUrl}
+          kokoroVoice={kokoroVoice}
+          setKokoroVoice={setKokoroVoice}
+          setKokoroUrl={setKokoroUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'whisper_openai_settings':
-      return <WhisperOpenAISettingsPage
-        whisperOpenAIUrl={whisperOpenAIUrl}
-        setWhisperOpenAIUrl={setWhisperOpenAIUrl}
-        whisperOpenAIApiKey={whisperOpenAIApiKey}
-        setWhisperOpenAIApiKey={setWhisperOpenAIApiKey}
-        whisperOpenAIModel={whisperOpenAIModel}
-        setWhisperOpenAIModel={setWhisperOpenAIModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'stylebertvits2_settings':
+        return <StyleBertVits2SettingsPage
+          stylebertvits2ServerUrl={stylebertvits2ServerUrl}
+          setStylebertvits2ServerUrl={setStylebertvits2ServerUrl}
+          stylebertvits2ModelId={stylebertvits2ModelId}
+          setStylebertvits2ModelId={setStylebertvits2ModelId}
+          stylebertvits2Style={stylebertvits2Style}
+          setStylebertvits2Style={setStylebertvits2Style}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'whispercpp_settings':
-      return <WhisperCppSettingsPage
-        whisperCppUrl={whisperCppUrl}
-        setWhisperCppUrl={setWhisperCppUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'rvc_settings':
+        return <RVCSettingsPage
+          rvcUrl={rvcUrl}
+          rvcEnabled={rvcEnabled}
+          rvcModelName={rvcModelName}
+          rvcIndexPath={rvcIndexPath}
+          rvcF0upKey={rvcF0upKey}
+          rvcF0Method={rvcF0Method}
+          rvcIndexRate={rvcIndexRate}
+          rvcFilterRadius={rvcFilterRadius}
+          rvcResampleSr={rvcResampleSr}
+          rvcRmsMixRate={rvcRmsMixRate}
+          rvcProtect={rvcProtect}
+          setRvcUrl={setRvcUrl}
+          setRvcEnabled={setRvcEnabled}
+          setRvcModelName={setRvcModelName}
+          setRvcIndexPath={setRvcIndexPath}
+          setRvcF0upKey={setRvcF0UpKey}
+          setRvcF0Method={setRvcF0Method}
+          setRvcIndexRate={setRvcIndexRate}
+          setRvcFilterRadius={setRvcFilterRadius}
+          setRvcResampleSr={setRvcResampleSr}
+          setRvcRmsMixRate={setRvcRmsMixRate}
+          setRvcProtect={setRvcProtect}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'vision_backend':
-      return <VisionBackendPage
-        visionBackend={visionBackend}
-        setVisionBackend={setVisionBackend}
-        setSettingsUpdated={setSettingsUpdated}
-        setPage={setPage}
-        breadcrumbs={breadcrumbs}
-        setBreadcrumbs={setBreadcrumbs}
+      case 'stt_backend':
+        return <STTBackendPage
+          sttBackend={sttBackend}
+          setSTTBackend={setSTTBackend}
+          setSettingsUpdated={setSettingsUpdated}
+          setPage={setPage}
+          breadcrumbs={breadcrumbs}
+          setBreadcrumbs={setBreadcrumbs}
         />
 
-    case 'vision_llamacpp_settings':
-      return <VisionLlamaCppSettingsPage
-        visionLlamaCppUrl={visionLlamaCppUrl}
-        setVisionLlamaCppUrl={setVisionLlamaCppUrl}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'stt_wake_word':
+        return <STTWakeWordSettingsPage
+          sttWakeWordEnabled={sttWakeWordEnabled}
+          sttWakeWord={sttWakeWord}
+          timeBeforeIdle={timeBeforeIdle}
+          setSTTWakeWordEnabled={setSTTWakeWordEnabled}
+          setSTTWakeWord={setSTTWakeWord}
+          setTimeBeforeIdle={setTimeBeforeIdle}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'vision_ollama_settings':
-      return <VisionOllamaSettingsPage
-        visionOllamaUrl={visionOllamaUrl}
-        setVisionOllamaUrl={setVisionOllamaUrl}
-        visionOllamaModel={visionOllamaModel}
-        setVisionOllamaModel={setVisionOllamaModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'whisper_openai_settings':
+        return <WhisperOpenAISettingsPage
+          whisperOpenAIUrl={whisperOpenAIUrl}
+          setWhisperOpenAIUrl={setWhisperOpenAIUrl}
+          whisperOpenAIApiKey={whisperOpenAIApiKey}
+          setWhisperOpenAIApiKey={setWhisperOpenAIApiKey}
+          whisperOpenAIModel={whisperOpenAIModel}
+          setWhisperOpenAIModel={setWhisperOpenAIModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'vision_openai_settings':
-      return <VisionOpenAISettingsPage
-        visionOpenAIApiKey={visionOpenAIApiKey}
-        setVisionOpenAIApiKey={setVisionOpenAIApiKey}
-        visionOpenAIUrl={visionOpenAIUrl}
-        setVisionOpenAIUrl={setVisionOpenAIUrl}
-        visionOpenAIModel={visionOpenAIModel}
-        setVisionOpenAIModel={setVisionOpenAIModel}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'whispercpp_settings':
+        return <WhisperCppSettingsPage
+          whisperCppUrl={whisperCppUrl}
+          setWhisperCppUrl={setWhisperCppUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'vision_system_prompt':
-      return <VisionSystemPromptPage
-        visionSystemPrompt={visionSystemPrompt}
-        setVisionSystemPrompt={setVisionSystemPrompt}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'vision_backend':
+        return <VisionBackendPage
+          visionBackend={visionBackend}
+          setVisionBackend={setVisionBackend}
+          setSettingsUpdated={setSettingsUpdated}
+          setPage={setPage}
+          breadcrumbs={breadcrumbs}
+          setBreadcrumbs={setBreadcrumbs}
         />
 
-    case 'system_prompt':
-      return <SystemPromptPage
-        systemPrompt={systemPrompt}
-        setSystemPrompt={setSystemPrompt}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'vision_llamacpp_settings':
+        return <VisionLlamaCppSettingsPage
+          visionLlamaCppUrl={visionLlamaCppUrl}
+          setVisionLlamaCppUrl={setVisionLlamaCppUrl}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'name':
-      return <NamePage
-        name={name}
-        setName={setName}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'vision_ollama_settings':
+        return <VisionOllamaSettingsPage
+          visionOllamaUrl={visionOllamaUrl}
+          setVisionOllamaUrl={setVisionOllamaUrl}
+          visionOllamaModel={visionOllamaModel}
+          setVisionOllamaModel={setVisionOllamaModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'amica_life':
-      return <AmicaLifePage
-        amicaLifeEnabled={amicaLifeEnabled}
-        reasoningEngineEnabled={reasoningEngineEnabled}
-        reasoningEngineUrl={reasoningEngineUrl}
-        timeBeforeIdle={timeBeforeIdle}
-        minTimeInterval={minTimeInterval}
-        maxTimeInterval={maxTimeInterval}
-        timeToSleep={timeToSleep}
-        idleTextPrompt={idleTextPrompt}
-        setAmicaLifeEnabled={setAmicaLifeEnabled}
-        setReasoningEngineEnabled={setReasoningEngineEnabled}
-        setReasoningEngineUrl={setReasoningEngineUrl}
-        setTimeBeforeIdle={setTimeBeforeIdle}
-        setMinTimeInterval={setMinTimeInterval}
-        setMaxTimeInterval={setMaxTimeInterval}
-        setTimeToSleep={setTimeToSleep}
-        setIdleTextPrompt={setIdleTextPrompt}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'vision_openai_settings':
+        return <VisionOpenAISettingsPage
+          visionOpenAIApiKey={visionOpenAIApiKey}
+          setVisionOpenAIApiKey={setVisionOpenAIApiKey}
+          visionOpenAIUrl={visionOpenAIUrl}
+          setVisionOpenAIUrl={setVisionOpenAIUrl}
+          visionOpenAIModel={visionOpenAIModel}
+          setVisionOpenAIModel={setVisionOpenAIModel}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    case 'external_api':
-      return <ExternalAPIPage
-        externalApiEnabled={externalApiEnabled}
-        setExternalApiEnabled={setExternalApiEnabled}
-        setSettingsUpdated={setSettingsUpdated}
+      case 'vision_system_prompt':
+        return <VisionSystemPromptPage
+          visionSystemPrompt={visionSystemPrompt}
+          setVisionSystemPrompt={setVisionSystemPrompt}
+          setSettingsUpdated={setSettingsUpdated}
         />
 
-    default:
-      throw new Error('page not found');
+      case 'system_prompt':
+        return <SystemPromptPage
+          systemPrompt={systemPrompt}
+          setSystemPrompt={setSystemPrompt}
+          setSettingsUpdated={setSettingsUpdated}
+        />
+
+      case 'name':
+        return <NamePage
+          name={name}
+          setName={setName}
+          setSettingsUpdated={setSettingsUpdated}
+        />
+
+      case 'amica_life':
+        return <AmicaLifePage
+          amicaLifeEnabled={amicaLifeEnabled}
+          reasoningEngineEnabled={reasoningEngineEnabled}
+          reasoningEngineUrl={reasoningEngineUrl}
+          timeBeforeIdle={timeBeforeIdle}
+          minTimeInterval={minTimeInterval}
+          maxTimeInterval={maxTimeInterval}
+          timeToSleep={timeToSleep}
+          idleTextPrompt={idleTextPrompt}
+          setAmicaLifeEnabled={setAmicaLifeEnabled}
+          setReasoningEngineEnabled={setReasoningEngineEnabled}
+          setReasoningEngineUrl={setReasoningEngineUrl}
+          setTimeBeforeIdle={setTimeBeforeIdle}
+          setMinTimeInterval={setMinTimeInterval}
+          setMaxTimeInterval={setMaxTimeInterval}
+          setTimeToSleep={setTimeToSleep}
+          setIdleTextPrompt={setIdleTextPrompt}
+          setSettingsUpdated={setSettingsUpdated}
+        />
+
+      case 'external_api':
+        return <ExternalAPIPage
+          externalApiEnabled={externalApiEnabled}
+          setExternalApiEnabled={setExternalApiEnabled}
+          setSettingsUpdated={setSettingsUpdated}
+        />
+
+      default:
+        throw new Error('page not found');
     }
   }
 
@@ -844,7 +861,7 @@ export const Settings = ({
             </div>
 
             <div ref={mainMenuRef}>
-              { renderPage() }
+              {renderPage()}
             </div>
           </div>
         </div>

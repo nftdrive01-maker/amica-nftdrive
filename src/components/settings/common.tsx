@@ -176,6 +176,7 @@ export function getIconFromPage(page: string): JSX.Element {
     case 'coquiLocal_settings': return <AdjustmentsHorizontalIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'localXTTS_settings':  return <AdjustmentsHorizontalIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'kokoro_settings':  return <AdjustmentsHorizontalIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
+    case 'stylebertvits2_settings': return <AdjustmentsHorizontalIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
 
     case 'stt_backend':              return <PencilSquareIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'stt_wake_word':            return <MoonIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
@@ -233,6 +234,7 @@ function getLabelFromPage(page: string): string {
     case 'coquiLocal_settings': return t('Coqui Local');
     case 'localXTTS_settings':  return t('Alltalk');
     case 'kokoro_settings':  return t('Kokoro');
+    case 'stylebertvits2_settings': return t('Style-Bert-VITS2');
 
     case 'vision_backend':           return t('Vision Backend');
     case 'vision_llamacpp_settings': return t('LLama.cpp');

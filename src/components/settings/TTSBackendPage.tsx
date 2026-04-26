@@ -12,6 +12,7 @@ const ttsEngines = [
   {key: "piper",      label: "Piper"},
   {key: "coquiLocal", label: "Coqui Local"},
   {key: "kokoro",     label: "Kokoro"},
+  {key: "stylebertvits2", label: "Style-Bert-VITS2"},
 ];
 
 function idToTitle(id: string): string {
@@ -58,7 +59,7 @@ export function TTSBackendPage({
             </select>
           </FormRow>
         </li>
-        { ["elevenlabs", "speecht5", "openai_tts", "piper", "coquiLocal", "localXTTS", "kokoro"].includes(ttsBackend) && (
+        { ["elevenlabs", "speecht5", "openai_tts", "piper", "coquiLocal", "localXTTS", "kokoro", "stylebertvits2"].includes(ttsBackend) && (
           <li className="py-4">
             <FormRow label={`${t("Configure")} ${t(idToTitle(ttsBackend))}`}>
               <button

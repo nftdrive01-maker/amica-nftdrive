@@ -31,6 +31,7 @@ import { speecht5 } from "@/features/speecht5/speecht5";
 import { openaiTTS } from "@/features/openaiTTS/openaiTTS";
 import { localXTTSTTS } from "@/features/localXTTS/localXTTS";
 import { kokoro } from "../kokoro/kokoro";
+import { stylebertvits2 } from "@/features/stylebertvits2/stylebertvits2";
 
 import { AmicaLife } from "@/features/amicaLife/amicaLife";
 
@@ -695,6 +696,13 @@ export class Chat {
         }
         case "kokoro": {
           const voice = await kokoro(talk.message);
+          return voice.audio;
+        }
+        case "stylebertvits2": {
+          const voice = await stylebertvits2(talk.message);
+          if (rvcEnabled) {
+            return await this.handleRvc(voice.audio);
+          }
           return voice.audio;
         }
       }

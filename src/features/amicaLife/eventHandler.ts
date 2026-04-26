@@ -55,6 +55,11 @@ let previousAnimation = "";
 // Handles the VRM animation event.
 
 async function handleVRMAnimationEvent(viewer: Viewer, amicaLife: AmicaLife) {
+  if (!animationList || animationList.length === 0) {
+    amicaLife.eventProcessing = false;
+    return;
+  }
+
   let randomAnimation;
   do {
     randomAnimation = animationList[Math.floor(Math.random() * animationList.length)];
