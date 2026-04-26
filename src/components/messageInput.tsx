@@ -15,6 +15,7 @@ import { config } from "@/utils/config";
 import { WaveFile } from "wavefile";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { AudioControlsContext } from "@/features/moshi/components/audioControlsContext";
+import { checkInjectionToolHealth, fetchPublicDomainOptions } from "@/lib/injectionClient";
 
 
 export default function MessageInput({
@@ -39,6 +40,61 @@ export default function MessageInput({
   const { amicaLife } = useContext(AmicaLifeContext);
   const { audioControls: moshi } = useContext(AudioControlsContext);
   const [ moshiMuted, setMoshiMuted] = useState(moshi.isMuted());
+  const [domainMenuOpen, setDomainMenuOpen] = useState(false);
+  const [selectedDomain, setSelectedDomain] = useState(config("injection_default_domain"));
+  const [domainOptions, setDomainOptions] = useState<Array<{ id: string; label: string }>>(() => {
+    const fallback = [
+      { id: 'consultation', label: '専門相談' },
+      { id: 'facility_guide', label: '施設案内' },
+      { id: 'urgent_notice', label: '緊急告知' },
+    ];
+
+    try {
+      const parsed = JSON.parse(config("injection_domain_options"));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  });
+
+  const selectedDomainLabel =
+    domainOptions.find((domain: { id: string; label: string }) => domain.id === selectedDomain)?.label ||
+    config("injection_default_domain_label");
+
+  useEffect(() => {
+    const applyDefaultDomainFromApi = async () => {
+      try {
+        const defaultDomainId = config("injection_default_domain");
+        const isHealthy = await checkInjectionToolHealth();
+
+        if (isHealthy) {
+          const optionsFromApi = await fetchPublicDomainOptions();
+          if (optionsFromApi.length > 0) {
+            setDomainOptions(optionsFromApi);
+          }
+
+          const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
+          if (hasDefault) {
+            setSelectedDomain(defaultDomainId);
+          } else if (optionsFromApi.length > 0) {
+            setSelectedDomain(optionsFromApi[0].id);
+          } else {
+            setSelectedDomain(defaultDomainId);
+          }
+          return;
+        }
+
+        setSelectedDomain(defaultDomainId);
+      } catch {
+        setSelectedDomain(config("injection_default_domain"));
+      }
+    };
+
+    applyDefaultDomainFromApi();
+  }, []);
 
   const vad = useMicVAD({
     startOnLoad: false,
@@ -156,7 +212,7 @@ export default function MessageInput({
 
     if (config("autosend_from_mic") === 'true') {
       if (!wakeWordEnabled || bot.isAwake()) {
-        bot.receiveMessageFromUser(text,false);
+        bot.receiveMessageFromUser(text, false, selectedDomain);
       } 
     } else {
       setUserMessage(text);
@@ -199,7 +255,7 @@ export default function MessageInput({
   }, [whisperCppOutput]);
 
   function clickedSendButton() {
-    bot.receiveMessageFromUser(userMessage,false);
+    bot.receiveMessageFromUser(userMessage, false, selectedDomain);
     // only if we are using non-VAD mode should we focus on the input
     if (! vad.listening) {
       if (! hasOnScreenKeyboard()) {
@@ -212,7 +268,10 @@ export default function MessageInput({
   return (
     <div className="fixed bottom-2 z-20 w-full">
       <div className="mx-auto max-w-4xl p-2 backdrop-blur-lg border-0 rounded-lg">
-        <div className="grid grid-flow-col grid-cols-[min-content_1fr_min-content] gap-[8px]">
+        <div className="mb-1 px-1 text-xs text-white/90">
+          ナレッジ：{selectedDomainLabel}
+        </div>
+        <div className="grid grid-flow-col grid-cols-[min-content_min-content_1fr_min-content] gap-[8px]">
           <div>
             <div className='flex flex-col justify-center items-center'>
               {config("chatbot_backend") === "moshi" ? (
@@ -236,6 +295,38 @@ export default function MessageInput({
               />
               )}
             </div>
+          </div>
+
+          <div className="relative flex flex-col justify-center items-center">
+            <button
+              type="button"
+              className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center"
+              onClick={() => setDomainMenuOpen((prev) => !prev)}
+              title={`ナレッジ: ${selectedDomainLabel}`}
+            >
+              {/* 本（ナレッジ）アイコン */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
+              </svg>
+            </button>
+
+            {domainMenuOpen && (
+              <div className="absolute bottom-10 left-0 z-30 min-w-[160px] rounded-md bg-white shadow-md ring-1 ring-gray-200">
+                {domainOptions.map((domain: { id: string; label: string }) => (
+                  <button
+                    key={domain.id}
+                    type="button"
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${selectedDomain === domain.id ? 'font-bold' : ''}`}
+                    onClick={() => {
+                      setSelectedDomain(domain.id);
+                      setDomainMenuOpen(false);
+                    }}
+                  >
+                    {domain.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <input

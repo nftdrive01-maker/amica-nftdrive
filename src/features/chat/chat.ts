@@ -22,6 +22,7 @@ import {
 } from "./ollamaChat";
 import { getKoboldAiChatResponseStream } from "./koboldAiChat";
 import { getReasoingEngineChatResponseStream } from "./reasoiningEngineChat";
+import { fetchInjectedContext } from "@/lib/injectionClient";
 
 import { rvc } from "@/features/rvc/rvc";
 import { coquiLocal } from "@/features/coquiLocal/coquiLocal";
@@ -50,11 +51,13 @@ type Speak = {
   audioBuffer: ArrayBuffer | null;
   screenplay: Screenplay;
   streamIdx: number;
+  domainId?: string;
 };
 
 type TTSJob = {
   screenplay: Screenplay;
   streamIdx: number;
+  domainId?: string;
 };
 
 export class Chat {
@@ -215,11 +218,12 @@ export class Chat {
           continue;
         }
 
-        const audioBuffer = await this.fetchAudio(ttsJob.screenplay.talk);
+        const audioBuffer = await this.fetchAudio(ttsJob.screenplay.talk, ttsJob.domainId);
         this.speakJobs.enqueue({
           audioBuffer,
           screenplay: ttsJob.screenplay,
           streamIdx: ttsJob.streamIdx,
+          domainId: ttsJob.domainId,
         });
       } while (this.ttsJobs.size() > 0);
       await wait(50);
@@ -373,7 +377,7 @@ export class Chat {
   }
 
   // this happens either from text or from voice / whisper completion
-  public async receiveMessageFromUser(message: string, amicaLife: boolean) {
+  public async receiveMessageFromUser(message: string, amicaLife: boolean, domainId?: string) {
     if (message === null || message === "") {
       return;
     }
@@ -401,15 +405,36 @@ export class Chat {
       this.bubbleMessage("user", message);
     }
 
+    // Fetch injected context from injection-tool (fail-open)
+    const userTextForInjection = amicaLife ? message : this.currentUserMessage;
+    const effectiveDomainId = domainId || config("injection_default_domain");
+
+    const injected = await fetchInjectedContext(
+      userTextForInjection,
+      effectiveDomainId
+    );
+
+    // Compose system prompt with injected context
+    let systemPrompt = config("system_prompt");
+    if (injected.injectedSystemPrompt) {
+      systemPrompt = systemPrompt + "\n\n[動的知識ベース]\n" + injected.injectedSystemPrompt;
+    }
+
+    // Compose user message with injected context
+    let userContent = userTextForInjection;
+    if (injected.injectedUserContext) {
+      userContent = userContent + "\n\n【参考情報】\n" + injected.injectedUserContext;
+    }
+
     // make new stream
     const messages: Message[] = [
-      { role: "system", content: config("system_prompt") },
+      { role: "system", content: systemPrompt },
       ...this.messageList!,
-      { role: "user", content: amicaLife ? message : this.currentUserMessage },
+      { role: "user", content: userContent },
     ];
     // console.debug('messages', messages);
 
-    await this.makeAndHandleStream(messages);
+    await this.makeAndHandleStream(messages, effectiveDomainId);
   }
 
   public initSSE() {
@@ -514,7 +539,7 @@ export class Chat {
     }
 }
 
-  public async makeAndHandleStream(messages: Message[]) {
+  public async makeAndHandleStream(messages: Message[], domainId?: string) {
     try {
       this.streams.push(await this.getChatResponseStream(messages));
     } catch (e: any) {
@@ -531,10 +556,10 @@ export class Chat {
       return errMsg;
     }
 
-    return await this.handleChatResponseStream();
+    return await this.handleChatResponseStream(domainId);
   }
 
-  public async handleChatResponseStream() {
+  public async handleChatResponseStream(domainId?: string) {
     if (this.streams.length === 0) {
       console.log("no stream!");
       return;
@@ -594,6 +619,7 @@ export class Chat {
               this.ttsJobs.enqueue({
                 screenplay: aiTalks[0],
                 streamIdx: streamIdx,
+                domainId,
               });
             } 
 
@@ -636,7 +662,7 @@ export class Chat {
     return aiTextLog;
   }
 
-  async fetchAudio(talk: Talk): Promise<ArrayBuffer | null> {
+  async fetchAudio(talk: Talk, domainId?: string): Promise<ArrayBuffer | null> {
     // TODO we should remove non-speakable characters
     // since this depends on the tts backend, we should do it
     // in their respective functions
@@ -691,7 +717,7 @@ export class Chat {
           return voice.audio;
         }
         case "coquiLocal": {
-          const voice = await coquiLocal(talk.message);
+          const voice = await coquiLocal(talk.message, domainId);
           return voice.audio;
         }
         case "kokoro": {
@@ -699,7 +725,7 @@ export class Chat {
           return voice.audio;
         }
         case "stylebertvits2": {
-          const voice = await stylebertvits2(talk.message);
+          const voice = await stylebertvits2(talk.message, domainId);
           if (rvcEnabled) {
             return await this.handleRvc(voice.audio);
           }

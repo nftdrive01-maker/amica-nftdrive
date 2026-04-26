@@ -11,6 +11,7 @@ import { clsx } from "clsx";
 import { M_PLUS_2, Montserrat } from "next/font/google";
 import { useTranslation, Trans } from 'react-i18next';
 import {
+  Bars3Icon,
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
   CloudArrowDownIcon,
@@ -28,6 +29,7 @@ import {
   WrenchScrewdriverIcon,
   SignalIcon,
   AcademicCapIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { IconBrain } from '@tabler/icons-react';
 
@@ -140,7 +142,9 @@ export default function Home() {
   const [showDebug, setShowDebug] = useState(false);
   const [showChatMode, setShowChatMode] = useState(false);
   const [showSubconciousText, setShowSubconciousText] = useState(false);
+  const [showMainMenu, setShowMainMenu] = useState(false);
   const [showMoshi, setShowMoshi] = useState(false);
+  const mainMenuRef = useRef<HTMLDivElement>(null);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -330,6 +334,36 @@ export default function Home() {
     handleChatLogs(chatLog);
   }, [chatLog]);
 
+  useEffect(() => {
+    if (!showMainMenu) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!mainMenuRef.current) {
+        return;
+      }
+
+      if (!mainMenuRef.current.contains(event.target as Node)) {
+        setShowMainMenu(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowMainMenu(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [showMainMenu]);
+
   // this exists to prevent build errors with ssr
   useEffect(() => setShowContent(true), []);
   if (!showContent) return <></>;
@@ -381,7 +415,18 @@ export default function Home() {
       <MessageInputContainer isChatProcessing={chatProcessing} />
 
       {/* main menu */}
-      <div className="absolute z-10 m-2">
+      <div className="fixed left-2 top-2 z-20" ref={mainMenuRef}>
+        <button
+          type="button"
+          className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"
+          onClick={() => setShowMainMenu((prev) => !prev)}
+          aria-label="メニューを開閉"
+          aria-expanded={showMainMenu}
+        >
+          {showMainMenu ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+        </button>
+
+        {showMainMenu && (
         <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
           <div className='flex flex-col justify-center items-center p-1 space-y-3'>
             <MenuButton
@@ -537,7 +582,8 @@ export default function Home() {
             </div>
             
           </div>
-        </div>    
+        </div>
+        )}
       </div>
 
       {showChatLog && <ChatLog messages={chatLog} />}

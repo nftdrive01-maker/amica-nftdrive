@@ -1,7 +1,9 @@
 import { config } from '@/utils/config';
+import { normalizeTtsPronunciation } from '@/lib/ttsPronunciation';
 
 export async function coquiLocal(
   message: string,
+  domainId?: string,
 ) {
   let voiceId = config("coquiLocal_voiceid");
 
@@ -16,12 +18,8 @@ export async function coquiLocal(
   try {
 
 
-    // ★追加：ベンダー特製「発音矯正辞書」
-    // message（画面に表示される元のテキスト）を、発音用のテキストに変換する
-    let spokenText = message;
-    spokenText = spokenText.replace(/小海町/g, "コウミまち");
-    spokenText = spokenText.replace(/南佐久郡/g, "みなみさくぐん");
-    spokenText = spokenText.replace(/八峰の湯/g, "ヤッホーのゆ"); // 難読温泉名などもここで一網打尽！
+    // 発音矯正辞書を Ark-i API から取得して適用（失敗時はフォールバック辞書）
+    const spokenText = await normalizeTtsPronunciation(message, domainId);
 
     // ★修正：message ではなく spokenText をエンコードして送る
     const encodedText = encodeURIComponent(spokenText);

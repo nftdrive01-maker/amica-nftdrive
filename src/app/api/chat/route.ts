@@ -5,10 +5,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages, model, ...rest } = body;
 
+    // 環境変数からシステムプロンプトを取得（サーバー専用キー優先）
+    const resolvedSystemPrompt =
+      process.env.ARKI_SYSTEM_PROMPT ||
+      process.env.NEXT_PUBLIC_SYSTEM_PROMPT ||
+      "あなたは公式AIコンシェルジュです。丁寧で親しみやすく、質問に短く的確に回答してください。";
+
+
     // 3. コンテキスト（システムプロンプト）のサーバーサイド注入
     const systemPrompt = {
       role: "system",
-      content: "あなたは〇〇市の公式AIコンシェルジュです。丁寧で親しみやすい公務員として、住民の質問に短く的確に答えてください。"
+      content: resolvedSystemPrompt
     };
 
     // 先頭にシステムプロンプトを挿入。すでにシステムプロンプトがある場合は上書きするなどのロジックも可能ですが、

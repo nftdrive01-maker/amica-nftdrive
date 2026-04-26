@@ -131,6 +131,39 @@ This project originated as a fork of ChatVRM by Pixiv:
 
 [https://pixiv.github.io/ChatVRM](https://pixiv.github.io/ChatVRM)
 
+## 🧠 Dynamic Knowledge Injection
+
+Amica supports real-time dynamic knowledge injection via the **Injection Tool** (`d:\injection-tool`).
+
+### What is Injection Tool?
+
+A companion management tool that allows non-engineers to update AI's knowledge base without restarting Amica. 
+
+- **Multi-domain support**: Switch between consultation, facility guide, emergency notices, etc.
+- **Fail-open design**: Amica works normally even if Injection Tool stops
+- **Hybrid caching**: Offline fallback using browser cache
+
+### Quick Setup
+
+1. Start Injection Tool in a separate terminal:
+   ```bash
+   cd d:\injection-tool
+   npm run dev
+   # Opens at http://localhost:4001
+   ```
+
+2. Add to Amica `.env.local`:
+   ```env
+   NEXT_PUBLIC_INJECTION_TOOL_URL=http://localhost:4001
+   NEXT_PUBLIC_INJECTION_TOOL_ENABLED=true
+   ```
+
+3. Login to http://localhost:4001 with username/password from `.env.local`
+
+4. Update domain prompts in `/admin` → Changes apply immediately to Amica
+
+For detailed documentation, see [Injection Tool README](../injection-tool/README.md)
+
 ## 🔒 License
 * The majority of this project is released under the MIT license as found in the [LICENSE](https://github.com/semperai/amica/blob/master/LICENSE) file.
 * Assets such as 3D models and images are released under their authors respective licenses.

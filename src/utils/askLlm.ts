@@ -10,6 +10,7 @@ import { getKoboldAiChatResponseStream } from "@/features/chat/koboldAiChat";
 
 import { config } from "@/utils/config";
 import { processResponse } from "@/utils/processResponse";
+import { fetchInjectedContext } from "@/lib/injectionClient";
 
 // Function to ask llm with custom system prompt, if doesn't want it to speak provide the chat in params as null.
 export async function askLLM(
@@ -29,9 +30,28 @@ export async function askLLM(
       console.error(`${title}: ${message}`);
     },
   };
+
+  // Fetch injected context from injection-tool (fail-open)
+  const injected = await fetchInjectedContext(
+    userPrompt,
+    config("injection_default_domain")
+  );
+
+  // Compose system prompt with injected context
+  let composedSystemPrompt = systemPrompt;
+  if (injected.injectedSystemPrompt) {
+    composedSystemPrompt = composedSystemPrompt + "\n\n[動的知識ベース]\n" + injected.injectedSystemPrompt;
+  }
+
+  // Compose user prompt with injected context
+  let composedUserPrompt = userPrompt;
+  if (injected.injectedUserContext) {
+    composedUserPrompt = composedUserPrompt + "\n\n【参考情報】\n" + injected.injectedUserContext;
+  }
+
   const messages: Message[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
+    { role: "system", content: composedSystemPrompt },
+    { role: "user", content: composedUserPrompt },
   ];
 
   // Function to simulate fetching chat response stream based on the selected backend

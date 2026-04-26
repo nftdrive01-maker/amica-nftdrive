@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Amica BtoB SaaS',
-  description: 'AI Concierge',
+  title: 'Ark-i',
+  description: 'Ark-i AI Concierge',
 }
 
 export default function RootLayout({
@@ -8,9 +8,25 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev'
+
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', margin: 0 }}>
+        <main style={{ flex: 1 }}>{children}</main>
+        <footer
+          style={{
+            borderTop: '1px solid #e5e7eb',
+            padding: '10px 16px',
+            fontSize: '12px',
+            color: '#6b7280',
+            textAlign: 'center',
+            backgroundColor: '#fff',
+          }}
+        >
+          ©NFTDrive.inc　|　Version: {appVersion}
+        </footer>
+      </body>
     </html>
   )
 }

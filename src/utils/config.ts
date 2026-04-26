@@ -123,6 +123,19 @@ export const defaults = {
   x_bearer_token: process.env.NEXT_PUBLIC_X_BEARER_TOKEN ?? '',
   telegram_bot_token: process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN ?? '',
 
+  // --- 動的知識注入設定（injection-tool） ---
+  injection_tool_enabled: process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED ?? 'true',   // 動的知識注入を有効にするか
+  injection_tool_url: process.env.NEXT_PUBLIC_INJECTION_TOOL_URL ?? 'http://localhost:4001', // 注入ツールのエンドポイント
+  injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '2000',    // タイムアウト（ミリ秒）
+  injection_default_domain: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN ?? 'default', // デフォルトドメインID
+  injection_default_domain_label: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN_LABEL ?? 'デフォルト', // デフォルトドメイン表示名
+  injection_domain_options: process.env.NEXT_PUBLIC_INJECTION_DOMAIN_OPTIONS ?? '[{"id":"default","label":"デフォルト"}]',
+  injection_fallback_system_prompt: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_SYSTEM_PROMPT ?? '',
+  injection_fallback_user_context: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_USER_CONTEXT ?? '',
+  injection_tts_pronunciation_fallback_rules:
+    process.env.NEXT_PUBLIC_INJECTION_TTS_PRONUNCIATION_FALLBACK_RULES ??
+    '[{"from":"小海町","to":"コウミまち","priority":100},{"from":"南佐久郡","to":"みなみさくぐん","priority":90},{"from":"八峰の湯","to":"ヤッホーのゆ","priority":95}]',
+
   // --- アイドル時・自律動作のタイミング設定 ---
   min_time_interval_sec: '10',     // 自律動作する最小間隔（秒）
   max_time_interval_sec: '20',     // 自律動作する最大間隔（秒）
