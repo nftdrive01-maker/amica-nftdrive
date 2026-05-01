@@ -344,7 +344,12 @@ export default function Home() {
         return;
       }
 
-      if (!mainMenuRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (!mainMenuRef.current.contains(target)) {
         setShowMainMenu(false);
       }
     };

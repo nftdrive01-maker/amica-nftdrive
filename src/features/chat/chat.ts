@@ -67,6 +67,23 @@ export class Chat {
   public viewer?: Viewer;
   public alert?: Alert;
 
+    // TTS向けに、意味のない記号列や装飾を除去
+  private sanitizeTtsMessage(text: string): string {
+    return text
+      // Markdownの水平線っぽい記号列を削除
+      .replace(/(^|\n)\s*[-_*＝=]{3,}\s*(?=\n|$)/g, "\n")
+      // 連続ハイフン/アンダーバー等を空白化
+      .replace(/[-_＝=~]{3,}/g, " ")
+      // 記号だけの行を削除
+      .split(/\r?\n/)
+      .filter((line) => !/^[\s`'".,、。!！?？:：;；/\\|()[\]{}<>…・･\-_=~＊*]+$/.test(line))
+      .join(" ")
+      // 余分な空白を整理
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+
   public setChatLog?: (messageLog: Message[]) => void;
   public setUserMessage?: (message: string) => void;
   public setAssistantMessage?: (message: string) => void;
@@ -407,7 +424,7 @@ export class Chat {
 
     // Fetch injected context from injection-tool (fail-open)
     const userTextForInjection = amicaLife ? message : this.currentUserMessage;
-    const effectiveDomainId = domainId || config("injection_default_domain");
+    const effectiveDomainId = domainId || undefined;
 
     const injected = await fetchInjectedContext(
       userTextForInjection,
@@ -415,23 +432,20 @@ export class Chat {
     );
 
     // Compose system prompt with injected context
-    let systemPrompt = config("system_prompt");
+    let systemPrompt: string;
     if (injected.injectedSystemPrompt) {
-      systemPrompt = systemPrompt + "\n\n[動的知識ベース]\n" + injected.injectedSystemPrompt;
+      systemPrompt = injected.injectedSystemPrompt;
+    } else {
+      systemPrompt = config("system_prompt");
     }
 
-    // Compose user message with injected context
-    let userContent = userTextForInjection;
-    if (injected.injectedUserContext) {
-      userContent = userContent + "\n\n【参考情報】\n" + injected.injectedUserContext;
-    }
-
-    // make new stream
+    // make new stream (userはユーザーの質問のみ、ナレッジはsystemに統合済み)
     const messages: Message[] = [
       { role: "system", content: systemPrompt },
       ...this.messageList!,
-      { role: "user", content: userContent },
+      { role: "user", content: userTextForInjection },
     ];
+
     // console.debug('messages', messages);
 
     await this.makeAndHandleStream(messages, effectiveDomainId);
@@ -440,7 +454,7 @@ export class Chat {
   public initSSE() {
     if (!isDev || config("external_api_enabled") !== "true") {
       return;
-    }  
+    }
     // Close existing SSE connection if it exists
     this.closeSSE();
 
@@ -464,20 +478,20 @@ export class Chat {
             const messages: Message[] = [
               { role: "system", content: config("system_prompt") },
               ...this.messageList!,
-              { role: "user", content: data},
+              { role: "user", content: data },
             ];
             let stream = await getEchoChatResponseStream(messages);
             this.streams.push(stream);
             this.handleChatResponseStream();
             break;
-          
+
           case 'animation':
             console.log('Animation data received:', data);
             const animation = await loadVRMAnimation(`/animations/${data}`);
             if (!animation) {
               throw new Error("Loading animation failed");
             }
-            this.viewer?.model?.playAnimation(animation,data);
+            this.viewer?.model?.playAnimation(animation, data);
             requestAnimationFrame(() => { this.viewer?.resetCameraLerp(); });
             break;
 
@@ -507,7 +521,7 @@ export class Chat {
 
           case 'systemPrompt':
             console.log('System Prompt data received:', data);
-            updateConfig("system_prompt",data);
+            updateConfig("system_prompt", data);
             break;
 
           default:
@@ -533,11 +547,11 @@ export class Chat {
 
   public closeSSE() {
     if (this.eventSource) {
-        console.log("Closing existing SSE connection...");
-        this.eventSource.close();
-        this.eventSource = null;
+      console.log("Closing existing SSE connection...");
+      this.eventSource.close();
+      this.eventSource = null;
     }
-}
+  }
 
   public async makeAndHandleStream(messages: Message[], domainId?: string) {
     try {
@@ -621,11 +635,11 @@ export class Chat {
                 streamIdx: streamIdx,
                 domainId,
               });
-            } 
+            }
 
             // thought bubble
             this.thoughtBubbleMessage(isThinking, aiTalks[0].text);
-            
+
             if (!firstSentenceEncountered) {
               console.timeEnd("performance_time_to_first_sentence");
               firstSentenceEncountered = true;
@@ -668,6 +682,9 @@ export class Chat {
     // in their respective functions
     // this is just a simple solution for now
     talk = cleanTalk(talk);
+    //sanitize message for tts (remove meaningless symbols and decorations)
+    talk.message = this.sanitizeTtsMessage(talk.message);
+
     if (talk.message.trim() === "" || config("tts_muted") === "true") {
       return null;
     }
@@ -725,7 +742,7 @@ export class Chat {
           return voice.audio;
         }
         case "stylebertvits2": {
-          const voice = await stylebertvits2(talk.message, domainId);
+          const voice = await stylebertvits2(talk.message);
           if (rvcEnabled) {
             return await this.handleRvc(voice.audio);
           }
@@ -750,7 +767,7 @@ export class Chat {
 
     if (config("reasoning_engine_enabled") === "true") {
       return getReasoingEngineChatResponseStream(systemPrompt, conversationMessages)
-    } 
+    }
 
     switch (chatbotBackend) {
       case "arbius_llm":

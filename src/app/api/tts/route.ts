@@ -3,14 +3,14 @@ import { NextRequest } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { text, model_id, style, server_url } = body;
+    const { text, model_id, style } = body;
 
     if (!text) {
       return new Response(JSON.stringify({ error: "Text is required" }), { status: 400 });
     }
 
-    // Style-Bert-VITS2 APIエンドポイント (フロントエンドからの指定を優先)
-    const baseUrl = server_url || process.env.STYLEBERTVITS2_URL || "http://127.0.0.1:5001";
+    // Style-Bert-VITS2 APIエンドポイント (サーバー環境変数のみ使用。クライアントからの指定は受け付けない)
+    const baseUrl = process.env.STYLEBERTVITS2_URL || "http://127.0.0.1:5000";
     
     // クエリパラメータの構築
     const params = new URLSearchParams({

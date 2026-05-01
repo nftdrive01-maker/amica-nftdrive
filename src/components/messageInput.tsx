@@ -1,7 +1,7 @@
 import * as ort from "onnxruntime-web"
 ort.env.wasm.wasmPaths = '/_next/static/chunks/'
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useMicVAD } from "@ricky0123/vad-react"
 import { IconButton } from "./iconButton";
 import { useTranscriber } from "@/hooks/useTranscriber";
@@ -11,11 +11,58 @@ import { AlertContext } from "@/features/alert/alertContext";
 import { ChatContext } from "@/features/chat/chatContext";
 import { openaiWhisper  } from "@/features/openaiWhisper/openaiWhisper";
 import { whispercpp  } from "@/features/whispercpp/whispercpp";
-import { config } from "@/utils/config";
+import { config, defaultConfig, updateConfig } from "@/utils/config";
 import { WaveFile } from "wavefile";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { AudioControlsContext } from "@/features/moshi/components/audioControlsContext";
-import { checkInjectionToolHealth, fetchPublicDomainOptions } from "@/lib/injectionClient";
+import { fetchPublicDomainOptions } from "@/lib/injectionClient";
+import { ViewerContext } from "@/features/vrmViewer/viewerContext";
+import { buildUrl } from "@/utils/buildUrl";
+
+type DomainOption = {
+  id: string;
+  label: string;
+  bgUrl?: string;
+  characterName?: string;
+  vrmUrl?: string;
+  stylebertvits2ModelId?: string;
+  stylebertvits2Style?: string;
+};
+
+function toRuntimeAssetUrl(raw: string): string {
+  const value = (raw || '').trim();
+  if (!value) {
+    return '';
+  }
+
+  if (value.startsWith('/bgimage/')) {
+    return `/api/injection-assets${value}`;
+  }
+
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.pathname.startsWith('/bgimage/') || parsed.pathname.startsWith('/vrm/')) {
+        return `/api/injection-assets${parsed.pathname}${parsed.search}`;
+      }
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
+function toRenderableUrl(raw: string): string {
+  const value = (raw || '').trim();
+  if (!value) {
+    return '';
+  }
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+  return buildUrl(value);
+}
 
 
 export default function MessageInput({
@@ -39,62 +86,261 @@ export default function MessageInput({
   const { alert } = useContext(AlertContext);
   const { amicaLife } = useContext(AmicaLifeContext);
   const { audioControls: moshi } = useContext(AudioControlsContext);
+  const { viewer } = useContext(ViewerContext);
   const [ moshiMuted, setMoshiMuted] = useState(moshi.isMuted());
   const [domainMenuOpen, setDomainMenuOpen] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState(config("injection_default_domain"));
-  const [domainOptions, setDomainOptions] = useState<Array<{ id: string; label: string }>>(() => {
+  const lastVadErrorMessageRef = useRef<string | null>(null);
+  const initialDomainConfigRef = useRef({
+    name: config("name"),
+    bgUrl: defaultConfig("bg_url"),
+    bgColor: config("bg_color"),
+    vrmUrl: defaultConfig("vrm_url"),
+    vrmHash: defaultConfig("vrm_hash"),
+    vrmSaveType: defaultConfig("vrm_save_type"),
+    stylebertvits2ModelId: config("stylebertvits2_model_id"),
+    stylebertvits2Style: config("stylebertvits2_style"),
+  });
+  const appliedDomainConfigRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const migrateLegacyAssetConfig = async () => {
+      const currentBgUrl = config('bg_url');
+      const currentVrmUrl = config('vrm_url');
+
+      const normalizedBgUrl = toRuntimeAssetUrl(currentBgUrl);
+      const normalizedVrmUrl = toRuntimeAssetUrl(currentVrmUrl);
+
+      const updates: Array<Promise<void>> = [];
+      if (currentBgUrl !== normalizedBgUrl) {
+        updates.push(updateConfig('bg_url', normalizedBgUrl));
+      }
+      if (currentVrmUrl !== normalizedVrmUrl) {
+        updates.push(updateConfig('vrm_url', normalizedVrmUrl));
+      }
+
+      if (updates.length > 0) {
+        await Promise.all(updates);
+      }
+    };
+
+    void migrateLegacyAssetConfig();
+  }, []);
+
+  const [domainOptions, setDomainOptions] = useState<Array<DomainOption>>(() => {
     const fallback = [
-      { id: 'consultation', label: '専門相談' },
-      { id: 'facility_guide', label: '施設案内' },
-      { id: 'urgent_notice', label: '緊急告知' },
+      {
+        id: config("injection_default_domain"),
+        label: config("injection_default_domain_label"),
+        bgUrl: '',
+        characterName: '',
+        vrmUrl: '',
+        stylebertvits2ModelId: '',
+        stylebertvits2Style: '',
+      },
     ];
 
     try {
       const parsed = JSON.parse(config("injection_domain_options"));
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        return fallback;
       }
-      return fallback;
+
+      const normalized = parsed
+        .filter((item: any) => item && typeof item === 'object' && typeof item.id === 'string')
+        .map((item: any) => ({
+          id: String(item.id).trim(),
+          label: String(item.label ?? item.name ?? item.id).trim(),
+          bgUrl: String(item.bgUrl ?? '').trim(),
+          characterName: String(item.characterName ?? '').trim(),
+          vrmUrl: String(item.vrmUrl ?? '').trim(),
+          stylebertvits2ModelId: String(item.stylebertvits2ModelId ?? '').trim(),
+          stylebertvits2Style: String(item.stylebertvits2Style ?? '').trim(),
+        }))
+        .filter((item: DomainOption) => item.id.length > 0 && item.label.length > 0);
+
+      return normalized.length > 0 ? normalized : fallback;
     } catch {
       return fallback;
     }
   });
 
   const selectedDomainLabel =
-    domainOptions.find((domain: { id: string; label: string }) => domain.id === selectedDomain)?.label ||
+    domainOptions.find((domain: DomainOption) => domain.id === selectedDomain)?.label ||
     config("injection_default_domain_label");
 
-  useEffect(() => {
-    const applyDefaultDomainFromApi = async () => {
+  const checkImageAvailable = useCallback((url: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (!url) {
+        resolve(false);
+        return;
+      }
+
+      const img = new Image();
+      const timeoutId = window.setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        resolve(false);
+      }, 7000);
+
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      };
+
+      img.onerror = () => {
+        clearTimeout(timeoutId);
+        resolve(false);
+      };
+
+      img.src = toRenderableUrl(url);
+    });
+  }, []);
+
+  const applyDomainOverrides = useCallback(async (domain: DomainOption | undefined) => {
+    const baseline = initialDomainConfigRef.current;
+    const previousVrmUrl = config('vrm_url');
+    const nextName = domain?.characterName?.trim() || baseline.name;
+    const normalizedBaselineBgUrl = toRuntimeAssetUrl(baseline.bgUrl || '');
+    const normalizedBaselineVrmUrl = toRuntimeAssetUrl(baseline.vrmUrl || '');
+    const requestedBgUrl = toRuntimeAssetUrl(domain?.bgUrl?.trim() || normalizedBaselineBgUrl);
+    const requestedVrmUrl = toRuntimeAssetUrl(domain?.vrmUrl?.trim() || normalizedBaselineVrmUrl);
+    let resolvedBgUrl = requestedBgUrl;
+    let resolvedVrmUrl = requestedVrmUrl;
+    let resolvedVrmHash = domain?.vrmUrl?.trim() ? '' : baseline.vrmHash;
+    let resolvedVrmSaveType = domain?.vrmUrl?.trim() ? 'web' : baseline.vrmSaveType;
+    const nextModelId = domain?.stylebertvits2ModelId?.trim() || baseline.stylebertvits2ModelId;
+    const nextStyle = domain?.stylebertvits2Style?.trim() || baseline.stylebertvits2Style;
+
+    if (typeof document !== 'undefined' && domain?.bgUrl?.trim()) {
+      const bgOk = await checkImageAvailable(requestedBgUrl);
+      if (!bgOk) {
+        resolvedBgUrl = normalizedBaselineBgUrl;
+        alert.warning(
+          '背景画像の読み込みに失敗しました',
+          `ドメイン「${domain.label}」の背景画像を読み込めなかったため、デフォルト背景へ戻しました。`
+        );
+      }
+    }
+
+    await Promise.all([
+      updateConfig('name', nextName),
+      updateConfig('bg_url', resolvedBgUrl),
+      updateConfig('vrm_url', resolvedVrmUrl),
+      updateConfig('vrm_hash', resolvedVrmHash),
+      updateConfig('vrm_save_type', resolvedVrmSaveType),
+      updateConfig('stylebertvits2_model_id', nextModelId),
+      updateConfig('stylebertvits2_style', nextStyle),
+    ]);
+
+    if (typeof document !== 'undefined') {
+      if (resolvedBgUrl) {
+        document.body.style.backgroundColor = '';
+        document.body.style.backgroundImage = `url(${toRenderableUrl(resolvedBgUrl)})`;
+      } else if (baseline.bgColor) {
+        document.body.style.backgroundImage = '';
+        document.body.style.backgroundColor = baseline.bgColor;
+      } else {
+        document.body.style.backgroundColor = '';
+        document.body.style.backgroundImage = normalizedBaselineBgUrl ? `url(${toRenderableUrl(normalizedBaselineBgUrl)})` : '';
+      }
+    }
+
+    if (viewer.isReady && resolvedVrmUrl && previousVrmUrl !== resolvedVrmUrl) {
       try {
-        const defaultDomainId = config("injection_default_domain");
-        const isHealthy = await checkInjectionToolHealth();
+        await viewer.loadVrm(toRenderableUrl(resolvedVrmUrl), () => {});
+      } catch (error) {
+        console.error('Failed to switch VRM for selected domain:', error);
 
-        if (isHealthy) {
-          const optionsFromApi = await fetchPublicDomainOptions();
-          if (optionsFromApi.length > 0) {
-            setDomainOptions(optionsFromApi);
-          }
+        const fallbackVrmUrl = normalizedBaselineVrmUrl;
+        resolvedVrmUrl = fallbackVrmUrl;
+        resolvedVrmHash = baseline.vrmHash;
+        resolvedVrmSaveType = baseline.vrmSaveType;
 
-          const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
-          if (hasDefault) {
-            setSelectedDomain(defaultDomainId);
-          } else if (optionsFromApi.length > 0) {
-            setSelectedDomain(optionsFromApi[0].id);
-          } else {
-            setSelectedDomain(defaultDomainId);
+        await Promise.all([
+          updateConfig('vrm_url', resolvedVrmUrl),
+          updateConfig('vrm_hash', resolvedVrmHash),
+          updateConfig('vrm_save_type', resolvedVrmSaveType),
+        ]);
+
+        alert.warning(
+          'VRMの読み込みに失敗しました',
+          `ドメイン「${domain?.label ?? domain?.id ?? 'unknown'}」のVRMを読み込めなかったため、デフォルトVRMへ戻しました。`
+        );
+
+        if (viewer.isReady && fallbackVrmUrl && previousVrmUrl !== fallbackVrmUrl) {
+          try {
+            await viewer.loadVrm(toRenderableUrl(fallbackVrmUrl), () => {});
+          } catch (fallbackError) {
+            console.error('Failed to load fallback VRM:', fallbackError);
           }
+        }
+      }
+    }
+  }, [alert, checkImageAvailable, viewer]);
+
+  // selectedDomain を ref で保持し、callback の依存から除外することで
+  // ドメイン選択時に useEffect が再発火するのを防ぐ
+  const selectedDomainRef = useRef(selectedDomain);
+  useEffect(() => {
+    selectedDomainRef.current = selectedDomain;
+  }, [selectedDomain]);
+
+  useEffect(() => {
+    const domain = domainOptions.find((item) => item.id === selectedDomain);
+    const signature = JSON.stringify({
+      domainId: selectedDomain,
+      bgUrl: domain?.bgUrl || '',
+      characterName: domain?.characterName || '',
+      vrmUrl: domain?.vrmUrl || '',
+      stylebertvits2ModelId: domain?.stylebertvits2ModelId || '',
+      stylebertvits2Style: domain?.stylebertvits2Style || '',
+    });
+
+    if (appliedDomainConfigRef.current === signature) {
+      return;
+    }
+
+    appliedDomainConfigRef.current = signature;
+    void applyDomainOverrides(domain);
+  }, [applyDomainOverrides, domainOptions, selectedDomain]);
+
+  const refreshDomainOptions = useCallback(async (preferCurrent: boolean) => {
+    const defaultDomainId = config("injection_default_domain");
+
+    try {
+      const optionsFromApi = await fetchPublicDomainOptions();
+      if (optionsFromApi.length === 0) {
+        return;
+      }
+
+      setDomainOptions(optionsFromApi);
+
+      if (preferCurrent) {
+        // メニュー展開時: 現在の選択が選択肢にあればそのまま維持
+        const hasCurrent = optionsFromApi.some((domain) => domain.id === selectedDomainRef.current);
+        if (hasCurrent) {
           return;
         }
-
-        setSelectedDomain(defaultDomainId);
-      } catch {
-        setSelectedDomain(config("injection_default_domain"));
       }
-    };
 
-    applyDefaultDomainFromApi();
-  }, []);
+      // 初回ロード時のみデフォルトに設定
+      const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
+      if (hasDefault) {
+        setSelectedDomain(defaultDomainId);
+      } else {
+        setSelectedDomain(optionsFromApi[0].id);
+      }
+    } catch {
+      // API失敗時は既存の選択肢/選択値を維持
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 初回マウント後に再生成しない
+
+  useEffect(() => {
+    void refreshDomainOptions(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // マウント時1回のみ
 
   const vad = useMicVAD({
     startOnLoad: false,
@@ -172,9 +418,20 @@ export default function MessageInput({
     },
   });
 
-  if (vad.errored) {
+  useEffect(() => {
+    if (!vad.errored) {
+      lastVadErrorMessageRef.current = null;
+      return;
+    }
+
+    const message = vad.errored.message ?? JSON.stringify(vad.errored);
+    if (lastVadErrorMessageRef.current === message) {
+      return;
+    }
+
+    lastVadErrorMessageRef.current = message;
     console.error('vad error', vad.errored);
-  }
+  }, [vad.errored]);
 
   function handleTranscriptionResult(preprocessed: string) {
     const cleanText = cleanTranscript(preprocessed);
@@ -301,7 +558,13 @@ export default function MessageInput({
             <button
               type="button"
               className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center"
-              onClick={() => setDomainMenuOpen((prev) => !prev)}
+              onClick={() => {
+                const next = !domainMenuOpen;
+                setDomainMenuOpen(next);
+                if (next) {
+                  void refreshDomainOptions(true);
+                }
+              }}
               title={`ナレッジ: ${selectedDomainLabel}`}
             >
               {/* 本（ナレッジ）アイコン */}

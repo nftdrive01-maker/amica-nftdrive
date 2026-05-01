@@ -48,7 +48,9 @@ export const defaults = {
   llamacpp_url: process.env.NEXT_PUBLIC_LLAMACPP_URL ?? 'http://127.0.0.1:8080',   // Llama.cppのURL
   llamacpp_stop_sequence: process.env.NEXT_PUBLIC_LLAMACPP_STOP_SEQUENCE ?? '(End)||[END]||Note||***||You:||User:||</s>', // 停止シーケンス
   ollama_url: process.env.NEXT_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434',       // OllamaのURL
-  ollama_model: process.env.NEXT_PUBLIC_OLLAMA_MODEL ?? 'pakachan/elyza-llama3-8b',                  // Ollamaのモデル名
+  // ollama_model: process.env.NEXT_PUBLIC_OLLAMA_MODEL ?? 'pakachan/elyza-llama3-8b',      
+  ollama_model: process.env.NEXT_PUBLIC_OLLAMA_MODEL ?? 'qwen2.5:7b',                  // Ollamaのモデル名
+              // Ollamaのモデル名
   koboldai_url: process.env.NEXT_PUBLIC_KOBOLDAI_URL ?? 'http://localhost:5001',   // KoboldAIのURL
   koboldai_use_extra: process.env.NEXT_PUBLIC_KOBOLDAI_USE_EXTRA ?? 'false',       // KoboldAI拡張設定の使用
   koboldai_stop_sequence: process.env.NEXT_PUBLIC_KOBOLDAI_STOP_SEQUENCE ?? '(End)||[END]||Note||***||You:||User:||</s>',
@@ -59,7 +61,7 @@ export const defaults = {
 
   // --- システム基本設定 ---
   tts_muted: 'false',                                                              // 音声出力を最初からミュートにするか
-  tts_backend: process.env.NEXT_PUBLIC_TTS_BACKEND ?? 'Style-Bert-VITS2',                    // 標準で使用するTTS
+  tts_backend: process.env.NEXT_PUBLIC_TTS_BACKEND ?? 'stylebertvits2',                    // 標準で使用するTTS
   stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',          // 標準で使用する音声認識
 
   // --- 画像認識 (Vision) 設定 ---
@@ -125,7 +127,7 @@ export const defaults = {
 
   // --- 動的知識注入設定（injection-tool） ---
   injection_tool_enabled: process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED ?? 'true',   // 動的知識注入を有効にするか
-  injection_tool_url: process.env.NEXT_PUBLIC_INJECTION_TOOL_URL ?? 'http://localhost:4001', // 注入ツールのエンドポイント
+  injection_tool_url: process.env.NEXT_PUBLIC_INJECTION_TOOL_URL ?? '/api/injection', // 注入ツールのエンドポイント
   injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '2000',    // タイムアウト（ミリ秒）
   injection_default_domain: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN ?? 'default', // デフォルトドメインID
   injection_default_domain_label: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN_LABEL ?? 'デフォルト', // デフォルトドメイン表示名
@@ -134,7 +136,7 @@ export const defaults = {
   injection_fallback_user_context: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_USER_CONTEXT ?? '',
   injection_tts_pronunciation_fallback_rules:
     process.env.NEXT_PUBLIC_INJECTION_TTS_PRONUNCIATION_FALLBACK_RULES ??
-    '[{"from":"小海町","to":"コウミまち","priority":100},{"from":"南佐久郡","to":"みなみさくぐん","priority":90},{"from":"八峰の湯","to":"ヤッホーのゆ","priority":95}]',
+    '[{"from":"NFTDrive","to":"エヌエフティ　ドライブ","priority":100},{"from":"VRChat","to":"ブイアールチャット","priority":100},{"from":"中島理男","to":"なかしま　みちお","priority":100}]',
 
   // --- アイドル時・自律動作のタイミング設定 ---
   min_time_interval_sec: '10',     // 自律動作する最小間隔（秒）
@@ -144,124 +146,20 @@ export const defaults = {
 
   // --- キャラクター基本定義 ---
   name: process.env.NEXT_PUBLIC_NAME ?? '夢 未来',                                   // キャラクターの名前
-  system_prompt: process.env.NEXT_PUBLIC_SYSTEM_PROMPT ?? `# 指示
-あなたは長野県南佐久郡 小海町の親切な窓口職員です。
-ユーザーからの質問に対し、以下の【小海町データベース】をもとに、日本語で簡潔かつ親しみやすい言葉で返答してください。
-さらにあなたは小海町を知り尽くした、農業の専門家出来もあります。
-農業の質問があれば【農業データベース】を優先して答えてください。
-
-
-# 制約事項
-- 思考プロセスや背景の説明は一切出力しないでください。直接、最終的な回答のみを出力してください。
-- 英語は絶対に使用しないでください。
-- データベースにない情報を聞かれた場合は、推測で答えずに「申し訳ありません、その情報についてはお答えできません。公式ホームページ等をご確認ください」と丁寧に案内してください。
-
-# 小海町データベース
-【1. 町の概要】
-- 読み方は「こうみまち」と読みます。
-- 場所: 長野県の東部、北八ヶ岳と奥秩父山塊に囲まれた千曲川沿いに位置する自然豊かな町。
-- 特徴: 夏は涼しく、冬はウィンタースポーツが楽しめる高原の町。
-- 地名由来: かつて存在した湖（海）に由来し、周囲の「海ノ口」「海尻」と合わせて特徴的な地名となっている。
-
-【2. 人口・世帯】
-- 人口: 約4,400人（2026年4月時点）。
-- 動向: 少子高齢化と人口減少が進行中。老年人口比率が高く、地域経済の回復や担い手確保が課題。
-
-【3. 観光・産業】
-- 主産業: 高原野菜の生産を中心とした農業。
-- 観光スポット:
-  ・松原湖（猪名湖）: ワカサギの氷上釣りで有名。
-  ・北八ヶ岳・稲子湯: 登山客の拠点。
-  ・八ヶ岳高原ロッジ・音楽堂: 音楽イベントやリゾート地として人気。
-  ・八峰の湯（ヤッホーのゆ）: 日帰り温泉施設。
-  ・JR鉄道最高地点: 小海線沿線の観光地。
-- 取り組み: 交流人口増加を目指し、観光まちづくりや移住・定住支援に積極的に取り組んでいる。
-
-【4. まとめ】
-「自然あふれる高原の環境を活かした観光・農業」と、「人口減少・高齢化という課題」が共存する町です。八ヶ岳の自然や温泉といった資源を活かし、住民と観光客が交流する持続可能なまちづくりを推進しています。
-
-# 農業データベース
-
-## 小海町の農産物
-
-### 主な品目と旬
-- **高原野菜**：レタス、キャベツ、ブロッコリー、カリフラワー、サニーレタスなど。春～秋にかけて収穫されます。
-- **じゃがいも**：冷涼な気候に適した品质の良いじゃがいもが栽培されています。
-- **とうもろこし**：甘みが強く、夏の風物詩として人気があります。
-- **そば**：小海町はそばの栽培も盛んで、風味豊かなそばが収穫されます。
-
-### 栽培の特徴
-- **標高の高さ**：標高約1,000m以上の冷涼な気候が、野菜の栽培に適しています。
-- **清らかな水**：八ヶ岳の伏流水を使ったきれいな水で、高品質な農産物が育てられています。
-- **昼夜の寒暖差**：日中の日差しと朝晩の冷え込みの差が大きいことが、野菜の甘みや食感を引き出しています。
-
-## 農業の現状と課題
-
-### 担い手不足
-- 高齢化や後継者不足により、耕作放棄地が増加する懸念があります。
-- 新規就農者を支援する取り組みも行われていますが、課題は多いです。
-
-### 販路の確保
-- 地元の直売所や道の駅、オンラインストアなどを活用した販路拡大が進められています。
-- ブランド力を高め、付加価値のある農産物を生産することが求められています。
-
-## 小海町の農業を支える人々
-
-###JA佐久浅間
-- JA佐久浅間が地域の農業を総合的に支援しています。
-- 営農指導や農産物の集荷・販売など、多岐にわたるサポートを提供しています。
-
-### 地元の直売所
-- 「道の駅こうみ」や「ほっとぴあ佐久」など、地元の直売所では新鮮な野菜が購入できます。
-- 観光客と地域住民の双方に、新鮮な農産物を提供する場となっています。
-
-## 小海町の農業の未来
-
-### スマート農業の導入
-- IT技術を活用したスマート農業の導入が進められています。
-- IoTセンサーやドローンなどを活用し、効率的な農業経営が目指されています。
-
-### 観光農業との連携
-- 観光客が農業体験を楽しめるプログラムなども企画されています。
-- 農業と観光を組み合わせることで、地域の活性化が期待されています。
-
-### 食の安全・安心への取り組み
-- 環境に配慮した持続可能な農業を推進しています。
-- 安全・安心な農産物を消費者に届けるための取り組みが続けられています。
-【主要野菜の農法アドバイス】
-1. 高原レタス・サニーレタス
-ポイント: 小海町の代名詞であるレタス類は、鮮度が命です。
-
-アドバイス: 朝晩の寒暖差を活かし、結球を良くするためには定植時の根付かせが肝心です。マルチを利用して地温を確保し、土壌の乾燥を防いでください。連作障害を避けるため、輪作計画をしっかり立てましょう。
-
-2. キャベツ・ブロッコリー
-ポイント: 冷涼な気候を好みますが、害虫対策が重要です。
-
-アドバイス: 標高が高いとはいえ、夏場はコナガやアブラムシが発生しやすいため、防虫ネットや適切な防除を徹底してください。ブロッコリーは収穫が遅れると花が開いてしまうので、締まりの良い適期収穫を心がけましょう。
-
-3. じゃがいも
-ポイント: 水はけの良い小海の土壌にぴったりな品目です。
-
-アドバイス: 芽出し（浴光催芽）をしっかり行い、力強い芽を育ててから植え付けてください。土寄せを十分に行うことで、芋の露出による緑化を防ぎ、収穫量を増やすことができます。
-
-4. とうもろこし
-ポイント: 昼夜の寒暖差が、驚くほどの甘みを作り出します。
-
-アドバイス: 非常に肥料を欲しがる「吸肥力の強い」作物です。元肥をしっかり入れ、雄穂が出る頃に追肥を行うのが甘さを引き出す秘訣です。アワノメイガ対策として、早めの防除をおすすめします。
-
-5. 白菜（秋収穫）
-ポイント: 霜が降りる前の収穫が理想ですが、寒さで甘みが増します。
-
-アドバイス: 根こぶ病に注意が必要です。石灰によるpH調整を行い、排水の良い圃場選びを行ってください。結球期には水分を多く必要とするため、適度な湿度の維持が品質を左右します。
-
-【スマート農業と未来への一歩】
-小海町では現在、担い手不足を解消するため、ドローンによる農薬散布やIoTセンサーによる土壌管理など、スマート農業の導入を推進しています。効率的な経営を目指したい方は、ぜひJA佐久浅間や町の窓口までご相談ください。`
-
+  system_prompt: process.env.NEXT_PUBLIC_SYSTEM_PROMPT ?? `あなたは丁寧で信頼できる案内役です。共通ナレッジを活用し、簡潔かつ正確に回答してください。`, // システムプロンプト（キャラクターの基本設定）
 
 };
 
 export function prefixed(key: string) {
   return `chatvrm_${key}`;
+}
+
+function normalizeConfigValue(key: string, value: string): string {
+  if (key === "tts_backend") {
+    return "stylebertvits2";
+  }
+
+  return value;
 }
 
 // Ensure syncLocalStorage runs only on the server side and once
@@ -277,16 +175,18 @@ if (typeof window !== "undefined") {
 
 export function config(key: string): string {
   if (typeof localStorage !== "undefined" && localStorage.hasOwnProperty(prefixed(key))) {
-    return (<any>localStorage).getItem(prefixed(key))!;
+    const value = (<any>localStorage).getItem(prefixed(key))!;
+    return normalizeConfigValue(key, value);
   }
 
   // Fallback to serverConfig if localStorage is unavailable or missing
   if (serverConfig && serverConfig.hasOwnProperty(key)) {
-    return serverConfig[key];
+    return normalizeConfigValue(key, serverConfig[key]);
   }
 
   if (defaults.hasOwnProperty(key)) {
-    return (<any>defaults)[key];
+    const value = (<any>defaults)[key];
+    return normalizeConfigValue(key, value);
   }
 
   throw new Error(`config key not found: ${key}`);
@@ -294,15 +194,16 @@ export function config(key: string): string {
 
 export async function updateConfig(key: string, value: string) {
   try {
+    const normalizedValue = normalizeConfigValue(key, value);
     const localKey = prefixed(key);
 
     // Update localStorage if available
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(localKey, value);
+      localStorage.setItem(localKey, normalizedValue);
     }
 
     // Sync update to server config
-    await handleConfig("update", { key, value });
+    await handleConfig("update", { key, value: normalizedValue });
 
   } catch (e) {
     console.error(`Error updating config for key "${key}": ${e}`);

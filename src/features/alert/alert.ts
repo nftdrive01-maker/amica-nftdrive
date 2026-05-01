@@ -1,4 +1,4 @@
-export type NotificationType = 'success' | 'error';
+export type NotificationType = 'success' | 'error' | 'warning';
 export type Notification = {
   type: NotificationType;
   title: string;
@@ -14,5 +14,9 @@ export class Alert {
 
   public error(title: string, message: string) {
     this.notifications.push({ type: 'error', title, message });
+  }
+
+  public warning(title: string, message: string) {
+    this.notifications.push({ type: 'warning', title, message });
   }
 }

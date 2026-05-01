@@ -7,6 +7,20 @@ import { InjectionInterceptRequest, InjectionInterceptResponse } from '@/types/i
 import { config } from '@/utils/config';
 import { getCachedInjection, cacheInjection } from '@/lib/injectionCache';
 
+/**
+ * base が相対パス（BFF プロキシ）の場合も正しくエンドポイントを生成する。
+ * 例: base='/api/injection', apiPath='/api/intercept' → '/api/injection/intercept'
+ *     base='http://localhost:4001', apiPath='/api/health' → 'http://localhost:4001/api/health'
+ */
+function buildEndpoint(base: string, apiPath: string): string {
+  if (base.startsWith('http://') || base.startsWith('https://')) {
+    return new URL(apiPath, base).toString();
+  }
+  // 相対BFFパス: apiPath の /api プレフィックスを除いて結合
+  const suffix = apiPath.replace(/^\/api/, '');
+  return base.replace(/\/$/, '') + suffix;
+}
+
 function buildEnvFallback(domainId: string): InjectionInterceptResponse {
   const fallbackSystem =
     typeof document !== 'undefined'
@@ -59,7 +73,7 @@ export async function fetchInjectedContext(
     const url =
       typeof document !== 'undefined'
         ? config('injection_tool_url')
-        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || 'http://localhost:4001';
+        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
 
     const timeoutMs = parseInt(
       typeof document !== 'undefined' ? config('injection_tool_timeout_ms') : '2000',
@@ -74,7 +88,7 @@ export async function fetchInjectedContext(
       return buildEnvFallback(targetDomainId);
     }
 
-    const endpoint = new URL('/api/intercept', url).toString();
+    const endpoint = buildEndpoint(url, '/api/intercept');
 
     const request: InjectionInterceptRequest = {
       userText,
@@ -158,11 +172,11 @@ export async function checkInjectionToolHealth(): Promise<boolean> {
     const url =
       typeof document !== 'undefined'
         ? config('injection_tool_url')
-        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || 'http://localhost:4001';
+        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
 
     if (!url) return false;
 
-    const endpoint = new URL('/api/health', url).toString();
+    const endpoint = buildEndpoint(url, '/api/health');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000);
@@ -185,7 +199,15 @@ export async function checkInjectionToolHealth(): Promise<boolean> {
   }
 }
 
-export async function fetchPublicDomainOptions(): Promise<Array<{ id: string; label: string }>> {
+export async function fetchPublicDomainOptions(): Promise<Array<{
+  id: string;
+  label: string;
+  bgUrl?: string;
+  characterName?: string;
+  vrmUrl?: string;
+  stylebertvits2ModelId?: string;
+  stylebertvits2Style?: string;
+}>> {
   try {
     const enabled =
       typeof document !== 'undefined'
@@ -199,39 +221,94 @@ export async function fetchPublicDomainOptions(): Promise<Array<{ id: string; la
     const url =
       typeof document !== 'undefined'
         ? config('injection_tool_url')
-        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || 'http://localhost:4001';
+        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
 
     if (!url) {
       return [];
     }
 
-    const endpoint = new URL('/api/public/domains', url).toString();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const endpoint = buildEndpoint(url, '/api/public/domains/');
+    const maxAttempts = 3;
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000 + attempt * 1000);
 
-      if (!response.ok) {
+      try {
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          if (attempt < maxAttempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            continue;
+          }
+          return [];
+        }
+
+        const payload = await response.json();
+        if (!Array.isArray(payload?.domains)) {
+          if (attempt < maxAttempts - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            continue;
+          }
+          return [];
+        }
+
+        const options = payload.domains
+          .filter(
+            (domain: any) =>
+              typeof domain?.id === 'string' &&
+              (typeof domain?.name === 'string' || typeof domain?.label === 'string')
+          )
+          .map((domain: any) => ({
+            id: String(domain.id).trim(),
+            label: String(domain.name || domain.label).trim(),
+            bgUrl: typeof domain.bgUrl === 'string' ? domain.bgUrl.trim() : '',
+            characterName: typeof domain.characterName === 'string' ? domain.characterName.trim() : '',
+            vrmUrl: typeof domain.vrmUrl === 'string' ? domain.vrmUrl.trim() : '',
+            stylebertvits2ModelId:
+              typeof domain.stylebertvits2ModelId === 'string'
+                ? domain.stylebertvits2ModelId.trim()
+                : '',
+            stylebertvits2Style:
+              typeof domain.stylebertvits2Style === 'string'
+                ? domain.stylebertvits2Style.trim()
+                : '',
+          }))
+          .filter((domain: { id: string; label: string }) => domain.id.length > 0 && domain.label.length > 0);
+
+        const unique = new Map<string, {
+          id: string;
+          label: string;
+          bgUrl?: string;
+          characterName?: string;
+          vrmUrl?: string;
+          stylebertvits2ModelId?: string;
+          stylebertvits2Style?: string;
+        }>();
+        for (const domain of options) {
+          if (!unique.has(domain.id)) {
+            unique.set(domain.id, domain);
+          }
+        }
+
+        return Array.from(unique.values());
+      } catch {
+        clearTimeout(timeoutId);
+        if (attempt < maxAttempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          continue;
+        }
         return [];
       }
-
-      const payload = await response.json();
-      if (!Array.isArray(payload?.domains)) {
-        return [];
-      }
-
-      return payload.domains
-        .filter((domain: any) => typeof domain?.id === 'string' && typeof domain?.name === 'string')
-        .map((domain: any) => ({ id: domain.id, label: domain.name }));
-    } catch {
-      clearTimeout(timeoutId);
-      return [];
     }
+
+    return [];
   } catch {
     return [];
   }

@@ -6,35 +6,36 @@ import {
 } from "../amicaLife/eventHandler";
 import { Message } from "../chat/messages";
 
-export const configUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-configUrl.searchParams.append("type", "config");
+function getDataHandlerBaseUrl() {
+  if (typeof window !== "undefined") {
+    return "";
+  }
 
-export const userInputUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-userInputUrl.searchParams.append("type", "userInputMessages");
+  const configuredBaseUrl =
+    process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL ||
+    process.env.DEVELOPMENT_BASE_URL;
 
-export const subconsciousUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-subconsciousUrl.searchParams.append("type", "subconscious");
+  if (configuredBaseUrl && configuredBaseUrl.trim().length > 0) {
+    return configuredBaseUrl.replace(/\/$/, "");
+  }
 
-export const logsUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-logsUrl.searchParams.append("type", "logs");
+  return "http://127.0.0.1:3000";
+}
 
-export const chatLogsUrl = new URL(
-  `${process.env.NEXT_PUBLIC_DEVELOPMENT_BASE_URL}/api/dataHandler`,
-);
-chatLogsUrl.searchParams.append("type", "chatLogs");
+function buildDataHandlerUrl(type: string) {
+  return `${getDataHandlerBaseUrl()}/api/dataHandler?type=${encodeURIComponent(type)}`;
+}
+
+export const configUrl = buildDataHandlerUrl("config");
+export const userInputUrl = buildDataHandlerUrl("userInputMessages");
+export const subconsciousUrl = buildDataHandlerUrl("subconscious");
+export const logsUrl = buildDataHandlerUrl("logs");
+export const chatLogsUrl = buildDataHandlerUrl("chatLogs");
 
 // Cached server config
 export let serverConfig: Record<string, string> = {};
 
-export async function fetcher(method: string, url: URL, data?: any) {
+export async function fetcher(method: string, url: string, data?: any) {
   let response: any;
   switch (method) {
     case "POST":

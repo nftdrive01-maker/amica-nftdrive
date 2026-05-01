@@ -5,22 +5,41 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages, model, ...rest } = body;
 
-    // 環境変数からシステムプロンプトを取得（サーバー専用キー優先）
-    const resolvedSystemPrompt =
-      process.env.ARKI_SYSTEM_PROMPT ||
-      process.env.NEXT_PUBLIC_SYSTEM_PROMPT ||
-      "あなたは公式AIコンシェルジュです。丁寧で親しみやすく、質問に短く的確に回答してください。";
+    // クライアント（chat.ts）からsystemメッセージが来ていればそれを優先する
+    // systemが無い場合のみ環境変数で補完する
+    const hasClientSystem = Array.isArray(messages) && messages.some((m: any) => m.role === "system");
 
+    const newMessages = hasClientSystem
+      ? messages
+      : [
+          {
+            role: "system",
+            content:
+              process.env.ARKI_SYSTEM_PROMPT ||
+              process.env.NEXT_PUBLIC_SYSTEM_PROMPT ||
+              "【キャラクター設定】\nあなたは公式AIコンシェルジュです。\n丁寧で親しみやすく、質問に短く的確に回答してください。",
+          },
+          ...messages,
+        ];
 
-    // 3. コンテキスト（システムプロンプト）のサーバーサイド注入
-    const systemPrompt = {
-      role: "system",
-      content: resolvedSystemPrompt
+    const payload = {
+      model,
+      messages: newMessages,
+      ...rest,
     };
 
-    // 先頭にシステムプロンプトを挿入。すでにシステムプロンプトがある場合は上書きするなどのロジックも可能ですが、
-    // ここでは強制的に先頭に注入します。
-    const newMessages = [systemPrompt, ...messages.filter((m: any) => m.role !== "system")];
+        // デバッグログ（必要時のみ）
+    if (process.env.CHAT_DEBUG_LOG === "true") {
+      const lastUser = [...newMessages].reverse().find((m: any) => m?.role === "user");
+      console.log("[CHAT->OLLAMA]", JSON.stringify({
+        model: payload.model,
+        stream: (payload as any).stream,
+        options: (payload as any).options,
+        messageCount: payload.messages?.length ?? 0,
+        lastUser: lastUser?.content ?? null,
+      }, null, 2));
+    }
+
 
     // ローカルのOllamaへリクエストをプロキシ (直接ローカルホストを叩く)
     const ollamaUrl = "http://127.0.0.1:11434/api/chat";
@@ -29,11 +48,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: model,
-        messages: newMessages,
-        ...rest,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {

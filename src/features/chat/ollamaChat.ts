@@ -2,6 +2,45 @@ import { Message } from "./messages";
 import { buildPrompt } from "@/utils/buildPrompt";
 import { config } from '@/utils/config';
 
+function mergeChunkWithOverlap(
+  assembledAssistantText: string,
+  messagePiece: string,
+): { nextAssembled: string; normalizedPiece: string } {
+  if (!messagePiece) {
+    return { nextAssembled: assembledAssistantText, normalizedPiece: "" };
+  }
+
+  // 累積全文チャンク（全文再送）: すでに組み立て済み部分を差し引く
+  if (messagePiece.startsWith(assembledAssistantText)) {
+    const normalizedPiece = messagePiece.slice(assembledAssistantText.length);
+    return {
+      nextAssembled: assembledAssistantText + normalizedPiece,
+      normalizedPiece,
+    };
+  }
+
+  // 完全な再送チャンク
+  if (assembledAssistantText.endsWith(messagePiece)) {
+    return { nextAssembled: assembledAssistantText, normalizedPiece: "" };
+  }
+
+  // 部分オーバーラップ（例: assembled='abc123', piece='123def'）
+  const maxOverlap = Math.min(assembledAssistantText.length, messagePiece.length);
+  let overlapLength = 0;
+  for (let i = maxOverlap; i > 0; i--) {
+    if (assembledAssistantText.endsWith(messagePiece.slice(0, i))) {
+      overlapLength = i;
+      break;
+    }
+  }
+
+  const normalizedPiece = messagePiece.slice(overlapLength);
+  return {
+    nextAssembled: assembledAssistantText + normalizedPiece,
+    normalizedPiece,
+  };
+}
+
 export async function getOllamaChatResponseStream(messages: Message[]) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -23,27 +62,64 @@ export async function getOllamaChatResponseStream(messages: Message[]) {
   const stream = new ReadableStream({
     async start(controller: ReadableStreamDefaultController) {
       const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let assembledAssistantText = "";
       try {
-        // Ollama sends chunks of multiple complete JSON objects separated by newlines
+        // Ollama は NDJSON で返すため、チャンク境界を跨ぐ行をバッファで連結して解析する
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const data = decoder.decode(value);
-          const jsonResponses = data
-            .trim() // Ollama sends an empty line after the final JSON message...
-            .split("\n")
-            //.filter((val) => !!val) 
+          buffer += decoder.decode(value, { stream: true });
 
-          for (const jsonResponse of jsonResponses) {
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const jsonResponse = line.trim();
+            if (!jsonResponse) {
+              continue;
+            }
             try {
               const json = JSON.parse(jsonResponse);
-              const messagePiece = json.message.content;
+              const messagePiece = json?.message?.content;
               if (!!messagePiece) {
-                controller.enqueue(messagePiece);
+                const merged = mergeChunkWithOverlap(
+                  assembledAssistantText,
+                  messagePiece,
+                );
+                assembledAssistantText = merged.nextAssembled;
+                const normalizedPiece = merged.normalizedPiece;
+
+                if (normalizedPiece) {
+                  controller.enqueue(normalizedPiece);
+                }
               }
             } catch (error) {
               console.error(error);
             }
+          }
+        }
+
+        // ループ終了後に末尾バッファをフラッシュ
+        const tail = (buffer + decoder.decode()).trim();
+        if (tail) {
+          try {
+            const json = JSON.parse(tail);
+            const messagePiece = json?.message?.content;
+            if (!!messagePiece) {
+              const merged = mergeChunkWithOverlap(
+                assembledAssistantText,
+                messagePiece,
+              );
+              assembledAssistantText = merged.nextAssembled;
+              const normalizedPiece = merged.normalizedPiece;
+
+              if (normalizedPiece) {
+                controller.enqueue(normalizedPiece);
+              }
+            }
+          } catch (error) {
+            console.error(error);
           }
         }
       } catch (error) {

@@ -12,7 +12,7 @@ export async function stylebertvits2(message: string, domainId?: string) {
       },
       body: JSON.stringify({
         text: spokenText,
-        server_url: config("stylebertvits2_server_url"),
+        // server_url はサーバー側環境変数 STYLEBERTVITS2_URL で管理するため送信しない
         model_id: config("stylebertvits2_model_id"),
         style: config("stylebertvits2_style"),
       }),
