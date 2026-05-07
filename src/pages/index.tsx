@@ -66,6 +66,8 @@ import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
 import { VerticalSwitchBox } from "@/components/switchBox";
 import { ThoughtText } from "@/components/thoughtText";
+import { WaitingScreen } from "@/components/waitingScreen";
+import { acquireSession, sessionManager } from "@/lib/sessionManager";
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -158,6 +160,8 @@ export default function Home() {
   const [isVRSupported, setIsVRSupported] = useState(false);
 
   const [isVRHeadset, setIsVRHeadset] = useState(false);
+
+  const [sessionBlocked, setSessionBlocked] = useState(false);
 
 
   useEffect(() => {
@@ -371,7 +375,37 @@ export default function Home() {
 
   // this exists to prevent build errors with ssr
   useEffect(() => setShowContent(true), []);
+
+  // 同時接続数制限: injection-tool が有効なときのみセッションを取得
+  useEffect(() => {
+    if (!showContent) return;
+    const enabled = config('injection_tool_enabled')?.toLowerCase() === 'true';
+    if (!enabled) return;
+    const domainId = config('injection_default_domain') || 'default';
+    acquireSession(domainId).then((result) => {
+      if (result.acquired) {
+        if (result.sessionId) sessionManager.start(result.sessionId);
+        setSessionBlocked(false);
+      } else {
+        setSessionBlocked(true);
+      }
+    });
+  }, [showContent]);
+
   if (!showContent) return <></>;
+
+  if (sessionBlocked) {
+    const domainId = config('injection_default_domain') || 'default';
+    return (
+      <WaitingScreen
+        domainId={domainId}
+        onAcquired={(sessionId) => {
+          sessionManager.start(sessionId);
+          setSessionBlocked(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className={clsx(

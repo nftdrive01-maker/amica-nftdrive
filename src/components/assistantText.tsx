@@ -3,6 +3,36 @@ import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { IconButton } from "./iconButton";
 
+function renderWithLinks(text: string) {
+  const linkRegex = /((?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?)/g;
+  const parts = text.split(linkRegex);
+
+  return parts.map((part, i) => {
+    const trimmed = part.trim();
+    if (!trimmed) {
+      return part;
+    }
+
+    const isUrlLike = /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?$/.test(trimmed);
+    if (!isUrlLike) {
+      return part;
+    }
+
+    const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return (
+      <a
+        key={i}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline decoration-pink-500 hover:text-pink-700"
+      >
+        {part}
+      </a>
+    );
+  });
+}
+
 export const AssistantText = ({ message }: { message: string }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [unlimited, setUnlimited] = useState(false)
@@ -38,7 +68,7 @@ export const AssistantText = ({ message }: { message: string }) => {
               unlimited ? 'max-h-[calc(75vh)]' : 'max-h-32',
             )}>
               <div className="min-h-8 max-h-full text-gray-700 typography-16 font-bold">
-                {message.replace(/\[([a-zA-Z]*?)\]/g, "")}
+                {renderWithLinks(message.replace(/\[([a-zA-Z]*?)\]/g, ""))}
                 <div ref={scrollRef} />
               </div>
             </div>

@@ -1,4 +1,5 @@
 import { config } from '@/utils/config';
+import { toKana } from 'wanakana';
 
 interface PronunciationRule {
   id?: string;
@@ -7,6 +8,12 @@ interface PronunciationRule {
   priority?: number;
   domainId?: string;
 }
+
+interface PronunciationSettings {
+  wanaKanaEnabled: boolean;
+}
+
+const LATIN_WORD_PATTERN = /https?:\/\/\S+|www\.\S+|[A-Za-z][A-Za-z'-]*/g;
 
 /**
  * base が相対パス（BFFプロキシ）でも正しくエンドポイントを生成する
@@ -29,6 +36,7 @@ let inMemoryCache: {
   at: number;
   domainId?: string;
   rules: PronunciationRule[];
+  settings: PronunciationSettings;
 } | null = null;
 
 function parseFallbackRules(): PronunciationRule[] {
@@ -66,8 +74,37 @@ function applyRules(message: string, rules: PronunciationRule[]): string {
   return result;
 }
 
+function applyWanaKanaFallback(message: string, enabled: boolean): string {
+  if (!enabled || !message) {
+    return message;
+  }
+
+  return message.replace(LATIN_WORD_PATTERN, (segment) => {
+    if (/^https?:\/\//i.test(segment) || /^www\./i.test(segment)) {
+      return segment;
+    }
+
+    if (segment.length < 2 || !/[aeiou]/i.test(segment)) {
+      return segment;
+    }
+
+    const converted = toKana(segment.toLowerCase());
+    return /[ぁ-んァ-ヶ]/.test(converted) ? converted : segment;
+  });
+}
+
+function applyPronunciationPipeline(
+  message: string,
+  rules: PronunciationRule[],
+  settings: PronunciationSettings,
+): string {
+  const afterRules = applyRules(message, rules);
+  return applyWanaKanaFallback(afterRules, settings.wanaKanaEnabled);
+}
+
 export async function normalizeTtsPronunciation(message: string, domainId?: string): Promise<string> {
   const fallbackRules = parseFallbackRules();
+  const fallbackSettings: PronunciationSettings = { wanaKanaEnabled: false };
 
   const enabled =
     typeof document !== 'undefined'
@@ -87,7 +124,7 @@ export async function normalizeTtsPronunciation(message: string, domainId?: stri
   const cacheTtlMs = 5 * 60 * 1000;
 
   if (inMemoryCache && now - inMemoryCache.at < cacheTtlMs && inMemoryCache.domainId === domainId) {
-    return applyRules(message, inMemoryCache.rules);
+    return applyPronunciationPipeline(message, inMemoryCache.rules, inMemoryCache.settings);
   }
 
   try {
@@ -107,7 +144,7 @@ export async function normalizeTtsPronunciation(message: string, domainId?: stri
       clearTimeout(timeoutId);
 
       if (!res.ok) {
-        return applyRules(message, fallbackRules);
+        return applyPronunciationPipeline(message, fallbackRules, fallbackSettings);
       }
 
       const payload = await res.json();
@@ -116,19 +153,23 @@ export async function normalizeTtsPronunciation(message: string, domainId?: stri
             (item: any) => item && typeof item.from === 'string' && typeof item.to === 'string'
           )
         : fallbackRules;
+      const settings: PronunciationSettings = {
+        wanaKanaEnabled: payload?.settings?.wanaKanaEnabled === true,
+      };
 
       inMemoryCache = {
         at: now,
         domainId,
         rules,
+        settings,
       };
 
-      return applyRules(message, rules);
+      return applyPronunciationPipeline(message, rules, settings);
     } catch {
       clearTimeout(timeoutId);
-      return applyRules(message, fallbackRules);
+      return applyPronunciationPipeline(message, fallbackRules, fallbackSettings);
     }
   } catch {
-    return applyRules(message, fallbackRules);
+    return applyPronunciationPipeline(message, fallbackRules, fallbackSettings);
   }
 }

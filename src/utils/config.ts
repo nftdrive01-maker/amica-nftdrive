@@ -38,7 +38,7 @@ export const defaults = {
   voice_url: process.env.NEXT_PUBLIC_VOICE_URL ?? '',                              // 外部音声ファイルのURL
 
   // --- チャットバックエンド (LLM) 設定 ---
-  chatbot_backend: process.env.NEXT_PUBLIC_CHATBOT_BACKEND ?? 'Ollama',            // 使用するAIエンジン
+  chatbot_backend: process.env.NEXT_PUBLIC_CHATBOT_BACKEND ?? 'ollama',            // 使用するAIエンジン
   arbius_llm_model_id: process.env.NEXT_PUBLIC_ARBIUS_LLM_MODEL_ID ?? 'default',   // Arbius用モデルID
   openai_apikey: process.env.NEXT_PUBLIC_OPENAI_APIKEY ?? 'default',               // OpenAIのAPIキー
   openai_url: process.env.NEXT_PUBLIC_OPENAI_URL ?? 'https://i-love-amica.com',     // APIのベースURL
@@ -76,6 +76,7 @@ export const defaults = {
 
   // --- Whisper (音声認識) 設定 ---
   whispercpp_url: process.env.NEXT_PUBLIC_WHISPERCPP_URL ?? 'http://localhost:8080',
+  stt_language: process.env.NEXT_PUBLIC_STT_LANGUAGE ?? 'ja',
   openai_whisper_apikey: process.env.NEXT_PUBLIC_OPENAI_WHISPER_APIKEY ?? '',
   openai_whisper_url: process.env.NEXT_PUBLIC_OPENAI_WHISPER_URL ?? 'https://api.openai.com',
   openai_whisper_model: process.env.NEXT_PUBLIC_OPENAI_WHISPER_MODEL ?? 'whisper-1',
@@ -128,7 +129,7 @@ export const defaults = {
   // --- 動的知識注入設定（injection-tool） ---
   injection_tool_enabled: process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED ?? 'true',   // 動的知識注入を有効にするか
   injection_tool_url: process.env.NEXT_PUBLIC_INJECTION_TOOL_URL ?? '/api/injection', // 注入ツールのエンドポイント
-  injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '2000',    // タイムアウト（ミリ秒）
+  injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '8000',    // タイムアウト（ミリ秒）
   injection_default_domain: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN ?? 'default', // デフォルトドメインID
   injection_default_domain_label: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN_LABEL ?? 'デフォルト', // デフォルトドメイン表示名
   injection_domain_options: process.env.NEXT_PUBLIC_INJECTION_DOMAIN_OPTIONS ?? '[{"id":"default","label":"デフォルト"}]',

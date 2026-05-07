@@ -9,8 +9,11 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: "Text is required" }), { status: 400 });
     }
 
-    // Style-Bert-VITS2 APIエンドポイント (サーバー環境変数のみ使用。クライアントからの指定は受け付けない)
-    const baseUrl = process.env.STYLEBERTVITS2_URL || "http://127.0.0.1:5000";
+    const styleBertVits2BaseUrl =
+      process.env.STYLEBERTVITS2_URL ||
+      process.env.NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL ||
+      "http://127.0.0.1:5000";
+    const normalizedStyleBertVits2BaseUrl = styleBertVits2BaseUrl.replace(/\/$/, "");
     
     // クエリパラメータの構築
     const params = new URLSearchParams({
@@ -19,7 +22,7 @@ export async function POST(req: NextRequest) {
       style: style || "Neutral"
     });
 
-    const apiUrl = `${baseUrl}/voice?${params.toString()}`;
+    const apiUrl = `${normalizedStyleBertVits2BaseUrl}/voice?${params.toString()}`;
 
     const res = await fetch(apiUrl, {
       method: "GET", // Style-Bert-VITS2の仕様に準拠 (GETリクエストで音声データを取得)

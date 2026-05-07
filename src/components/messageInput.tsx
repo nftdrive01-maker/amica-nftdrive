@@ -18,6 +18,7 @@ import { AudioControlsContext } from "@/features/moshi/components/audioControlsC
 import { fetchPublicDomainOptions } from "@/lib/injectionClient";
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { buildUrl } from "@/utils/buildUrl";
+import { createWebSpeechTranscriber, isWebSpeechSupported, WebSpeechAudioLevel, WebSpeechController } from "@/features/webSpeech/webSpeech";
 
 type DomainOption = {
   id: string;
@@ -27,6 +28,38 @@ type DomainOption = {
   vrmUrl?: string;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
+};
+
+const sttBackendLabels: Record<string, string> = {
+  none: 'None',
+  whisper_browser: 'Whisper (Browser)',
+  web_speech: 'Web Speech API',
+  whisper_openai: 'Whisper (OpenAI)',
+  whispercpp: 'Whisper.cpp',
+};
+
+const ttsBackendLabels: Record<string, string> = {
+  none: 'None',
+  elevenlabs: 'ElevenLabs',
+  speecht5: 'SpeechT5',
+  openai_tts: 'OpenAI TTS',
+  localXTTS: 'Alltalk TTS',
+  piper: 'Piper',
+  coquiLocal: 'Coqui Local',
+  kokoro: 'Kokoro',
+  stylebertvits2: 'Style-Bert-VITS2',
+};
+
+const chatbotBackendLabels: Record<string, string> = {
+  echo: 'Echo',
+  arbius_llm: 'Arbius',
+  chatgpt: 'ChatGPT',
+  llamacpp: 'Llama.cpp',
+  windowai: 'Window.ai',
+  ollama: 'Ollama',
+  koboldai: 'KoboldAI',
+  moshi: 'Moshi',
+  openrouter: 'OpenRouter',
 };
 
 function toRuntimeAssetUrl(raw: string): string {
@@ -88,8 +121,19 @@ export default function MessageInput({
   const { audioControls: moshi } = useContext(AudioControlsContext);
   const { viewer } = useContext(ViewerContext);
   const [ moshiMuted, setMoshiMuted] = useState(moshi.isMuted());
+  const [webSpeechListening, setWebSpeechListening] = useState(false);
+  const webSpeechControllerRef = useRef<WebSpeechController | null>(null);
+  const webSpeechFallbackNotifiedRef = useRef(false);
+  const webSpeechMaxRmsRef = useRef(0);
+  const webSpeechLastLevelLogAtRef = useRef(0);
   const [domainMenuOpen, setDomainMenuOpen] = useState(false);
-  const [selectedDomain, setSelectedDomain] = useState(config("injection_default_domain"));
+  const [selectedDomain, setSelectedDomain] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('amica_selected_domain_id');
+      if (saved) return saved;
+    }
+    return config("injection_default_domain");
+  });
   const lastVadErrorMessageRef = useRef<string | null>(null);
   const initialDomainConfigRef = useRef({
     name: config("name"),
@@ -168,6 +212,39 @@ export default function MessageInput({
   const selectedDomainLabel =
     domainOptions.find((domain: DomainOption) => domain.id === selectedDomain)?.label ||
     config("injection_default_domain_label");
+
+  const currentSTTBackend = config('stt_backend');
+  const currentTTSBackend = config('tts_backend');
+  const currentChatbotBackend = config('chatbot_backend');
+
+  const currentSTTLabel = sttBackendLabels[currentSTTBackend] ?? currentSTTBackend;
+  const currentTTSLabel = ttsBackendLabels[currentTTSBackend] ?? currentTTSBackend;
+  const currentChatbotLabel = chatbotBackendLabels[currentChatbotBackend] ?? currentChatbotBackend;
+
+  const currentAIModel = (() => {
+    switch (currentChatbotBackend) {
+      case 'arbius_llm':
+        return config('arbius_llm_model_id');
+      case 'chatgpt':
+        return config('openai_model');
+      case 'ollama':
+        return config('ollama_model');
+      case 'openrouter':
+        return config('openrouter_model');
+      case 'llamacpp':
+        return 'server-default';
+      case 'windowai':
+        return 'browser-model';
+      case 'koboldai':
+        return 'server-model';
+      case 'moshi':
+        return 'realtime';
+      case 'echo':
+        return 'echo';
+      default:
+        return '-';
+    }
+  })();
 
   const checkImageAvailable = useCallback((url: string): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -286,8 +363,16 @@ export default function MessageInput({
     selectedDomainRef.current = selectedDomain;
   }, [selectedDomain]);
 
+  // viewer が ready になったあとに VRM を再ロードするための ref
+  const pendingVrmUrlRef = useRef<string | null>(null);
+
   useEffect(() => {
     const domain = domainOptions.find((item) => item.id === selectedDomain);
+
+    // ドメインが一覧に見つからない場合はまだ API データ未着のため何もしない
+    // (applyDomainOverrides(undefined) でデフォルトにリセットされるのを防ぐ)
+    if (!domain) return;
+
     const signature = JSON.stringify({
       domainId: selectedDomain,
       bgUrl: domain?.bgUrl || '',
@@ -302,8 +387,34 @@ export default function MessageInput({
     }
 
     appliedDomainConfigRef.current = signature;
+
+    // viewer がまだ準備できていない場合は VRM URL を pending に積んでおく
+    if (domain.vrmUrl?.trim() && !viewer.isReady) {
+      pendingVrmUrlRef.current = domain.vrmUrl.trim();
+    }
+
     void applyDomainOverrides(domain);
-  }, [applyDomainOverrides, domainOptions, selectedDomain]);
+  }, [applyDomainOverrides, domainOptions, selectedDomain, viewer]);
+
+  // viewer.isReady のポーリング: pendingVrmUrl があり viewer が ready になったら再適用
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (!viewer.isReady || !pendingVrmUrlRef.current) {
+        return;
+      }
+      clearInterval(intervalId);
+      pendingVrmUrlRef.current = null;
+      // appliedDomainConfigRef をリセットして applyDomainOverrides を再実行させる
+      appliedDomainConfigRef.current = null;
+      const domain = domainOptions.find((item) => item.id === selectedDomainRef.current);
+      if (domain) {
+        void applyDomainOverrides(domain);
+      }
+    }, 500);
+
+    return () => clearInterval(intervalId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyDomainOverrides, domainOptions, viewer]);
 
   const refreshDomainOptions = useCallback(async (preferCurrent: boolean) => {
     const defaultDomainId = config("injection_default_domain");
@@ -324,12 +435,19 @@ export default function MessageInput({
         }
       }
 
-      // 初回ロード時のみデフォルトに設定
-      const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
-      if (hasDefault) {
-        setSelectedDomain(defaultDomainId);
+      // localStorageに保存済みの選択を優先して復元
+      const savedId = typeof window !== 'undefined' ? localStorage.getItem('amica_selected_domain_id') : null;
+      const hasSaved = savedId && optionsFromApi.some((domain) => domain.id === savedId);
+      if (hasSaved) {
+        setSelectedDomain(savedId!);
       } else {
-        setSelectedDomain(optionsFromApi[0].id);
+        // 初回ロード時のみデフォルトに設定
+        const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
+        if (hasDefault) {
+          setSelectedDomain(defaultDomainId);
+        } else {
+          setSelectedDomain(optionsFromApi[0].id);
+        }
       }
     } catch {
       // API失敗時は既存の選択肢/選択値を維持
@@ -349,6 +467,11 @@ export default function MessageInput({
       console.time('performance_speech');
     },
     onSpeechEnd: (audio: Float32Array) => {
+      // Web Speech API is handled separately, skip VAD callback
+      if (isWebSpeechBackend) {
+        return;
+      }
+
       console.debug('vad', 'on_speech_end');
       console.timeEnd('performance_speech');
       console.time('performance_transcribe');
@@ -470,7 +593,9 @@ export default function MessageInput({
     if (config("autosend_from_mic") === 'true') {
       if (!wakeWordEnabled || bot.isAwake()) {
         bot.receiveMessageFromUser(text, false, selectedDomain);
-      } 
+      } else {
+        setUserMessage(text);
+      }
     } else {
       setUserMessage(text);
     }
@@ -486,6 +611,114 @@ export default function MessageInput({
       bot.updateAwake();
     }
   }
+
+  const isWebSpeechBackend = config('stt_backend') === 'web_speech';
+
+  function toggleWebSpeech() {
+    console.log('[toggleWebSpeech] START - webSpeechListening:', webSpeechListening);
+    
+    if (!isWebSpeechSupported()) {
+      console.error('[toggleWebSpeech] Web Speech API not supported');
+      alert.error('Web Speech API is not supported', 'このブラウザでは Web Speech API が使えません。');
+      return;
+    }
+
+    if (webSpeechListening) {
+      console.log('[toggleWebSpeech] Stopping listening');
+      webSpeechControllerRef.current?.stop();
+      setWebSpeechListening(false);
+      return;
+    }
+
+    try {
+      console.log('[toggleWebSpeech] Creating transcriber...');
+      webSpeechMaxRmsRef.current = 0;
+      webSpeechLastLevelLogAtRef.current = 0;
+      webSpeechControllerRef.current = createWebSpeechTranscriber('ja-JP', {
+        onResult: (text: string) => {
+          console.log('[toggleWebSpeech] onResult:', text);
+          handleTranscriptionResult(text);
+        },
+        onAudioLevel: (level: WebSpeechAudioLevel) => {
+          if (level.rms > webSpeechMaxRmsRef.current) {
+            webSpeechMaxRmsRef.current = level.rms;
+          }
+
+          const now = Date.now();
+          if (now - webSpeechLastLevelLogAtRef.current >= 1000) {
+            webSpeechLastLevelLogAtRef.current = now;
+            console.log(
+              '[webSpeech][mic] rms=', level.rms.toFixed(4),
+              'peak=', level.peak.toFixed(4),
+              'db=', level.db.toFixed(1),
+              'muted=', level.muted,
+              'maxRms=', webSpeechMaxRmsRef.current.toFixed(4),
+            );
+          }
+        },
+        onError: (message: string) => {
+          console.error('[toggleWebSpeech] onError:', message);
+          
+          let userMessage = 'Web Speech APIエラー：' + message;
+          if (message === 'no-speech') {
+            userMessage = '音声が検出されませんでした。\n\n確認事項：\n• マイクが接続されているか\n• ブラウザがマイクを許可しているか\n• マイク音量が十分か\n• ボタンをクリック後、すぐに話し始めたか';
+          } else if (message === 'not-allowed') {
+            userMessage = 'マイクの使用が許可されていません。\n\nブラウザ設定でマイクアクセスを許可してください。';
+          }
+          
+          alert.error('Web Speech API', userMessage);
+        },
+        onEnd: () => {
+          console.log('[toggleWebSpeech] onEnd maxRms=', webSpeechMaxRmsRef.current.toFixed(4));
+          webSpeechMaxRmsRef.current = 0;
+          setWebSpeechListening(false);
+        },
+      });
+
+      console.log('[toggleWebSpeech] Starting recognition...');
+      setWebSpeechListening(true);
+      webSpeechControllerRef.current.start();
+      console.log('[toggleWebSpeech] Recognition started');
+    } catch (error: any) {
+      console.error('[toggleWebSpeech] Exception:', error);
+      setWebSpeechListening(false);
+      alert.error('web_speech init error', error?.message ?? String(error));
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      webSpeechControllerRef.current?.abort();
+      webSpeechControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (config('stt_backend') !== 'web_speech') {
+      webSpeechFallbackNotifiedRef.current = false;
+      return;
+    }
+
+    if (isWebSpeechSupported()) {
+      return;
+    }
+
+    if (webSpeechFallbackNotifiedRef.current) {
+      return;
+    }
+
+    webSpeechFallbackNotifiedRef.current = true;
+    void updateConfig('stt_backend', 'whisper_browser');
+    alert.warning('STTバックエンドを自動切替しました', 'このブラウザは Web Speech API 非対応のため Whisper (Browser) に切り替えました。');
+  }, [alert]);
+
+  useEffect(() => {
+    if (!isWebSpeechBackend && webSpeechListening) {
+      webSpeechControllerRef.current?.abort();
+      webSpeechControllerRef.current = null;
+      setWebSpeechListening(false);
+    }
+  }, [isWebSpeechBackend, webSpeechListening]);
 
   // for whisper_browser
   useEffect(() => {
@@ -528,6 +761,9 @@ export default function MessageInput({
         <div className="mb-1 px-1 text-xs text-white/90">
           ナレッジ：{selectedDomainLabel}
         </div>
+        <div className="mb-1 px-1 text-[11px] text-white/80">
+          STT: {currentSTTLabel} | TTS: {currentTTSLabel} | AI: {currentChatbotLabel} ({currentAIModel})
+        </div>
         <div className="grid grid-flow-col grid-cols-[min-content_min-content_1fr_min-content] gap-[8px]">
           <div>
             <div className='flex flex-col justify-center items-center'>
@@ -544,11 +780,14 @@ export default function MessageInput({
               />
               ) : (
                 <IconButton
-                iconName={vad.listening ? "24/PauseAlt" : "24/Microphone"}
+                iconName={(isWebSpeechBackend ? webSpeechListening : vad.listening) ? "24/PauseAlt" : "24/Microphone"}
                 className="bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"
-                isProcessing={vad.userSpeaking}
-                disabled={config('stt_backend') === 'none' || vad.loading || Boolean(vad.errored)}
-                onClick={vad.toggle}
+                isProcessing={isWebSpeechBackend ? webSpeechListening : vad.userSpeaking}
+                disabled={
+                  config('stt_backend') === 'none' ||
+                  (isWebSpeechBackend ? !isWebSpeechSupported() : (vad.loading || Boolean(vad.errored)))
+                }
+                onClick={isWebSpeechBackend ? toggleWebSpeech : vad.toggle}
               />
               )}
             </div>
@@ -582,6 +821,9 @@ export default function MessageInput({
                     className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${selectedDomain === domain.id ? 'font-bold' : ''}`}
                     onClick={() => {
                       setSelectedDomain(domain.id);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('amica_selected_domain_id', domain.id);
+                      }
                       setDomainMenuOpen(false);
                     }}
                   >

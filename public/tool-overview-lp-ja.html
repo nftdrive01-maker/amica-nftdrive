@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ark-i × Amica | 動的知識注入ツール概要</title>
+  <meta name="description" content="Ark-i（injection-tool）とAmicaの連携により、ドメイン別ナレッジ、MCPツール連携、同時接続制御を実現する概要LPです。" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121a33;
+      --text: #e8ecff;
+      --muted: #aab4d6;
+      --primary: #4f7cff;
+      --accent: #22d3ee;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --line: #263152;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 80% -10%, #23356f 0%, transparent 50%),
+        radial-gradient(1000px 500px at 10% -20%, #1b4c62 0%, transparent 45%),
+        var(--bg);
+      line-height: 1.7;
+    }
+    .wrap { width: min(1120px, 92%); margin: 0 auto; }
+    .hero { padding: 88px 0 56px; }
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border: 1px solid #3755b6;
+      border-radius: 999px;
+      color: #c7d5ff;
+      font-size: 13px;
+      margin-bottom: 16px;
+      background: rgba(79,124,255,0.12);
+    }
+    h1 { font-size: clamp(34px, 5vw, 54px); line-height: 1.15; margin: 0 0 14px; }
+    .lead { font-size: clamp(17px, 2vw, 21px); color: var(--muted); max-width: 860px; }
+    .cta {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      font-weight: 700;
+    }
+    .btn-primary { background: linear-gradient(90deg, var(--primary), #6b8dff); }
+    .btn-outline {
+      background: transparent;
+      border-color: #3d4f89;
+      color: #d4ddff;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+      margin: 26px 0 60px;
+    }
+    .card {
+      grid-column: span 4;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      min-height: 140px;
+    }
+    .card h3 { margin: 4px 0 10px; font-size: 18px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .section { padding: 24px 0 54px; }
+    .section h2 { font-size: clamp(26px, 4vw, 38px); margin: 0 0 16px; }
+    .section p { color: var(--muted); margin: 0 0 18px; }
+
+    .feature-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .feature {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .feature strong { display: block; margin-bottom: 6px; }
+    .feature span { color: var(--muted); font-size: 14px; }
+
+    .flow {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      overflow-x: auto;
+      font-family: Consolas, monospace;
+      color: #d6e0ff;
+      font-size: 14px;
+    }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .kpi .box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .kpi .label { color: var(--muted); font-size: 13px; }
+    .kpi .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
+
+    .pricing {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .plan {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .plan h3 { margin: 0 0 10px; }
+    .plan ul { margin: 0; padding-left: 18px; color: var(--muted); }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 24px 0 34px;
+      color: #8b96bf;
+      font-size: 13px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 900px) {
+      .card { grid-column: span 6; }
+      .feature-list { grid-template-columns: 1fr; }
+      .kpi { grid-template-columns: 1fr; }
+      .pricing { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .hero { padding-top: 62px; }
+      .card { grid-column: span 12; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <span class="badge">Ark-i / injection-tool</span>
+      <h1>情報更新に強いAI接客基盤を、<br>最小運用で。</h1>
+      <p class="lead">
+        Ark-i は Amica に動的知識注入を提供する管理ツールです。ドメイン別プロンプト、MCP外部ツール連携、
+        同時接続制御（待機画面付き）を一体化し、現場運用で起きる「情報鮮度」と「混雑」を同時に解決します。
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="http://localhost:4001/admin" target="_blank" rel="noopener noreferrer">管理画面を開く</a>
+        <a class="btn btn-outline" href="http://localhost:3000" target="_blank" rel="noopener noreferrer">Amicaを開く</a>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>ドメイン別運用</h3>
+          <p>相談・施設案内・告知など用途ごとにナレッジとMCPを切替。現場チームがノーコードで更新できます。</p>
+        </article>
+        <article class="card">
+          <h3>最新情報の取り込み</h3>
+          <p>MCP経由で外部データを都度取得し、回答に反映。古い静的プロンプト依存から脱却します。</p>
+        </article>
+        <article class="card">
+          <h3>公開時の混雑制御</h3>
+          <p>公開管理で同時接続上限を全体管理。満席時は待機画面へ誘導し、LLM/TTS過負荷を予防します。</p>
+        </article>
+      </div>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>解決できる課題</h2>
+      <div class="feature-list">
+        <div class="feature">
+          <strong>課題1: 情報更新が遅い</strong>
+          <span>ドキュメント修正や再デプロイ待ちが発生し、現場の最新情報が会話に反映されない。</span>
+        </div>
+        <div class="feature">
+          <strong>課題2: 役割ごとに回答を分けたい</strong>
+          <span>同じAIに複数業務を背負わせると精度が落ちる。ドメイン単位の文脈分離が必要。</span>
+        </div>
+        <div class="feature">
+          <strong>課題3: VPN公開時の同時利用が不安</strong>
+          <span>同時接続急増でLLM/TTS遅延。入口制御と待機導線がないと体験が崩れる。</span>
+        </div>
+        <div class="feature">
+          <strong>課題4: 外部ツール連携が複雑</strong>
+          <span>MCPサーバーの登録・切替・運用の標準化が難しい。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>システム連携フロー</h2>
+      <p>ユーザー入力から音声返答までを、Injection・MCP・TTSを通して一気通貫で処理します。</p>
+      <div class="flow">
+[User Input]
+   ↓
+[Amica]
+   ↓  POST /api/intercept
+[injection-tool]
+   ├─ Domain / Knowledge 合成
+   └─ MCP実行（必要時）
+   ↓
+[LLM 応答生成]
+   ↓
+[TTS前処理: URL除去]
+   ↓
+[SBV2 音声生成]
+   ↓
+[Amica UI再生]
+      </div>
+      <div class="kpi">
+        <div class="box">
+          <div class="label">同時接続制御</div>
+          <div class="value">公開管理</div>
+        </div>
+        <div class="box">
+          <div class="label">注入失敗時</div>
+          <div class="value">Fail-open</div>
+        </div>
+        <div class="box">
+          <div class="label">待機表示</div>
+          <div class="value">自動再試行</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>主な機能</h2>
+      <div class="pricing">
+        <article class="plan">
+          <h3>管理者向け</h3>
+          <ul>
+            <li>ドメイン管理（Prompt / Context / ナレッジ）</li>
+            <li>MCP管理（import / update / route）</li>
+            <li>公開管理（同時接続上限と現在接続数）</li>
+            <li>アセット管理（VRM / 背景）</li>
+          </ul>
+        </article>
+        <article class="plan">
+          <h3>利用者向け</h3>
+          <ul>
+            <li>混雑時は待機画面を表示（空きで自動接続）</li>
+            <li>回答中URLはクリック導線で表示</li>
+            <li>TTSはURL読み上げを自動除去</li>
+            <li>ドメインに応じた音声モデル切替</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2>導入ステップ（最短）</h2>
+      <div class="feature-list">
+        <div class="feature"><strong>Step 1</strong><span>SBV2 と injection-tool を起動し、管理画面ログイン情報を設定。</span></div>
+        <div class="feature"><strong>Step 2</strong><span>Amica の Injection URL を指定し、ドメインとナレッジを作成。</span></div>
+        <div class="feature"><strong>Step 3</strong><span>MCPサーバーをインポートし、対象ドメインへ紐付け。</span></div>
+        <div class="feature"><strong>Step 4</strong><span>公開管理で同時接続上限を設定し、VPN公開前に負荷試験。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      Ark-i / Amica Overview LP · Local Preview: <a href="/tool-overview-lp-ja.html" style="color:#b9c9ff">/tool-overview-lp-ja.html</a>
+    </div>
+  </footer>
+</body>
+</html>

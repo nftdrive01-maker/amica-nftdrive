@@ -76,7 +76,7 @@ export async function fetchInjectedContext(
         : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
 
     const timeoutMs = parseInt(
-      typeof document !== 'undefined' ? config('injection_tool_timeout_ms') : '2000',
+      typeof document !== 'undefined' ? config('injection_tool_timeout_ms') : '8000',
       10
     );
 
@@ -88,7 +88,7 @@ export async function fetchInjectedContext(
       return buildEnvFallback(targetDomainId);
     }
 
-    const endpoint = buildEndpoint(url, '/api/intercept');
+    const endpoint = buildEndpoint(url, '/api/intercept/');
 
     const request: InjectionInterceptRequest = {
       userText,
@@ -312,4 +312,39 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
   } catch {
     return [];
   }
+}
+
+// ドメイン音声設定のメモリキャッシュ（ページリロードまで有効）
+let _domainVoiceCache: Map<string, { stylebertvits2ModelId?: string; stylebertvits2Style?: string }> | null = null;
+let _domainVoiceFetchPromise: Promise<void> | null = null;
+
+async function ensureDomainVoiceCache(): Promise<void> {
+  if (_domainVoiceCache !== null) return;
+  if (_domainVoiceFetchPromise) {
+    return _domainVoiceFetchPromise;
+  }
+  _domainVoiceFetchPromise = fetchPublicDomainOptions().then((domains) => {
+    _domainVoiceCache = new Map();
+    for (const domain of domains) {
+      _domainVoiceCache.set(domain.id, {
+        stylebertvits2ModelId: domain.stylebertvits2ModelId || '',
+        stylebertvits2Style: domain.stylebertvits2Style || '',
+      });
+    }
+  }).catch(() => {
+    _domainVoiceCache = new Map();
+  });
+  return _domainVoiceFetchPromise;
+}
+
+/**
+ * ドメインIDに対応する音声モデル設定を取得する
+ * stylebertvits2ModelId / stylebertvits2Style が空の場合はグローバル設定にフォールバック
+ */
+export async function getDomainVoiceConfig(domainId: string): Promise<{
+  stylebertvits2ModelId?: string;
+  stylebertvits2Style?: string;
+}> {
+  await ensureDomainVoiceCache();
+  return _domainVoiceCache?.get(domainId) ?? {};
 }

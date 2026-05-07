@@ -5,6 +5,7 @@ export async function openaiWhisper(
   prompt?: string,
 ) {
   const apiKey = config("openai_whisper_apikey");
+  const language = 'ja';
   if (!apiKey) {
     throw new Error("Invalid OpenAI Whisper API Key");
   }
@@ -13,7 +14,8 @@ export async function openaiWhisper(
   const formData = new FormData();
   formData.append('file', file);
   formData.append('model', config('openai_whisper_model'));
-  formData.append('language', 'en');
+  formData.append('language', language);
+  formData.append('response_format', 'json');
   if (prompt) {
     formData.append('prompt', prompt);
   }

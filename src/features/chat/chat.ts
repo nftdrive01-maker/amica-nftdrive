@@ -70,6 +70,8 @@ export class Chat {
     // TTS向けに、意味のない記号列や装飾を除去
   private sanitizeTtsMessage(text: string): string {
     return text
+      // URLを除去（TTSで読み上げないようにする）
+      .replace(/https?:\/\/[^\s]+/g, "")
       // Markdownの水平線っぽい記号列を削除
       .replace(/(^|\n)\s*[-_*＝=]{3,}\s*(?=\n|$)/g, "\n")
       // 連続ハイフン/アンダーバー等を空白化
@@ -742,7 +744,7 @@ export class Chat {
           return voice.audio;
         }
         case "stylebertvits2": {
-          const voice = await stylebertvits2(talk.message);
+          const voice = await stylebertvits2(talk.message, domainId);
           if (rvcEnabled) {
             return await this.handleRvc(voice.audio);
           }
@@ -769,7 +771,7 @@ export class Chat {
       return getReasoingEngineChatResponseStream(systemPrompt, conversationMessages)
     }
 
-    switch (chatbotBackend) {
+    switch (chatbotBackend.toLowerCase()) {
       case "arbius_llm":
         return getArbiusChatResponseStream(messages);
       case "chatgpt":

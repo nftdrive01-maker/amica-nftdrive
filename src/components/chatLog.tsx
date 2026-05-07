@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { clsx } from "clsx";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import FlexTextarea from "@/components/flexTextarea/flexTextarea";
 import { Message } from "@/features/chat/messages";
 import { IconButton } from "@/components/iconButton";
@@ -153,6 +153,31 @@ export const ChatLog = ({
   );
 };
 
+function renderWithLinks(text: string): ReactNode[] {
+  const linkRegex = /((?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?)/g;
+  const parts = text.split(linkRegex);
+  return parts.map((part, i) => {
+    const trimmed = part.trim();
+    const isUrlLike = /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?$/.test(trimmed);
+    if (isUrlLike) {
+      const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+      return (
+        <a
+          key={i}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={href}
+          className="underline decoration-blue-500 hover:text-blue-700"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 function Chat({
   role,
   message,
@@ -203,7 +228,7 @@ function Chat({
       <div className="px-4 py-2 bg-white/80 backdrop-blur-lg rounded-b-lg shadow-sm">
         <div className='typography-16 font-M_PLUS_2 font-bold text-gray-800'>
           {role === "assistant" ? (
-            <div>{message}</div>
+            <div>{renderWithLinks(message)}</div>
           ) : (
             <FlexTextarea
               value={message}

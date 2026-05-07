@@ -4,9 +4,12 @@ export async function whispercpp(
   file: File,
   prompt?: string,
 ) {
+  const language = 'ja';
   // Request body
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('language', language);
+  formData.append('translate', 'false');
   if (prompt) {
     formData.append('prompt', prompt);
   }

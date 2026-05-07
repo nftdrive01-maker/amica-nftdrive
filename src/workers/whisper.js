@@ -34,8 +34,7 @@ self.addEventListener("message", async (event) => {
   const message = event.data;
 
   // Do some work...
-  // TODO use message data
-  let transcript = await transcribe(message.audio);
+  let transcript = await transcribe(message.audio, message.language, message.task);
   if (transcript === null) return;
 
   // Send the result back to the main thread
@@ -49,13 +48,12 @@ self.addEventListener("message", async (event) => {
 class AutomaticSpeechRecognitionPipelineFactory extends PipelineFactory {
   static task = "automatic-speech-recognition";
   // TODO load this from config
-  static model = "Xenova/whisper-tiny.en";
+  static model = "Xenova/whisper-tiny";
   // static model = "distil-whisper/distil-medium.en";
   static quantized = true;
 }
 
-const transcribe = async (audio) => {
-  // TODO use subtask and language
+const transcribe = async (audio, language = 'ja', task = 'transcribe') => {
 
   // TODO load from config
   const p = AutomaticSpeechRecognitionPipelineFactory;
@@ -142,8 +140,8 @@ const transcribe = async (audio) => {
     stride_length_s: 5,
 
     // Language and task
-    language: null,
-    task: null,
+    language,
+    task,
 
     // Return timestamps
     return_timestamps: true,

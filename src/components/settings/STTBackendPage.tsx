@@ -6,6 +6,7 @@ import { updateConfig } from "@/utils/config";
 const sttEngines = [
   {key: "none",            label: "None"},
   {key: "whisper_browser", label: "Whisper (Browser)"},
+  {key: "web_speech",      label: "Web Speech API"},
   {key: "whisper_openai",  label: "Whisper (OpenAI)"},
   {key: "whispercpp",      label: "Whisper.cpp"},
 ];

@@ -41,8 +41,12 @@ export async function POST(req: NextRequest) {
     }
 
 
-    // ローカルのOllamaへリクエストをプロキシ (直接ローカルホストを叩く)
-    const ollamaUrl = "http://127.0.0.1:11434/api/chat";
+    const ollamaBaseUrl =
+      process.env.OLLAMA_URL ||
+      process.env.NEXT_PUBLIC_OLLAMA_URL ||
+      "http://127.0.0.1:11434";
+    const normalizedOllamaBaseUrl = ollamaBaseUrl.replace(/\/$/, "");
+    const ollamaUrl = `${normalizedOllamaBaseUrl}/api/chat`;
     const res = await fetch(ollamaUrl, {
       method: "POST",
       headers: {

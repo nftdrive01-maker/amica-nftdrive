@@ -1,11 +1,20 @@
 import { config } from '@/utils/config';
 import { normalizeTtsPronunciation } from '@/lib/ttsPronunciation';
+import { getDomainVoiceConfig } from '@/lib/injectionClient';
 
 export async function coquiLocal(
   message: string,
   domainId?: string,
 ) {
   let voiceId = config("coquiLocal_voiceid");
+
+  // ドメインに専用モデルIDが設定されていればそちらを使用する
+  if (domainId) {
+    const domainConfig = await getDomainVoiceConfig(domainId);
+    if (domainConfig.stylebertvits2ModelId) {
+      voiceId = domainConfig.stylebertvits2ModelId;
+    }
+  }
 
   if (isNaN(Number(voiceId))) {
     console.warn(`Invalid voice ID "${voiceId}" detected. Defaulting to "0".`);
