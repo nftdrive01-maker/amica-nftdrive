@@ -61,6 +61,7 @@ import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { ChatModeText } from "@/components/chatModeText";
+import { ImageAvatar } from "@/components/imageAvatar";
 
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
@@ -443,6 +444,7 @@ export default function Home() {
       { config("chatbot_backend") === "moshi" && <Moshi setAssistantText={setAssistantMessage}/>  }
 
       <VrmStoreProvider>
+        <ImageAvatar speaking={chatSpeaking} />
         <VrmViewer chatMode={showChatMode}/>
         {showSettings && (
           <Settings
@@ -454,7 +456,7 @@ export default function Home() {
       <MessageInputContainer isChatProcessing={chatProcessing} />
 
       {/* main menu */}
-      <div className="fixed left-2 top-2 z-20" ref={mainMenuRef}>
+      <div className="fixed right-2 top-2 z-20" ref={mainMenuRef}>
         <button
           type="button"
           className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"

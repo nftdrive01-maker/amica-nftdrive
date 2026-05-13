@@ -1,5 +1,7 @@
 import { handleConfig, serverConfig } from "@/features/externalAPI/externalAPI";
 
+export const CONFIG_UPDATED_EVENT = "chatvrm:config-updated";
+
 export const defaults = {
   // --- AllTalk TTS (ローカル実行可能な高品質TTS) 設定 ---
   localXTTS_url: process.env.NEXT_PUBLIC_LOCALXTTS_URL ?? 'http://127.0.0.1:7851', // AllTalkサーバーのURL
@@ -32,6 +34,10 @@ export const defaults = {
   vrm_url: process.env.NEXT_PUBLIC_VRM_HASH ?? '/vrm/mirai-yukata.vrm',          // キャラクター(VRM)のパス
   vrm_hash: '1',                                                                    // VRMファイルのハッシュ値
   vrm_save_type: 'web',                                                            // モデルデータの保存方法
+  vrm_enabled: 'true',                                                             // VRMアバター表示を有効にするか
+  image_avatar_idle_url: '',                                                       // 2Dアバター(通常)画像
+  image_avatar_talk_url: '',                                                       // 2Dアバター(発話中)画像
+  image_avatar_talk_interval_ms: '180',                                            // 発話中の切替速度(ms)
   youtube_videoid: '',                                                             // 背景等で流すYouTube動画ID
   animation_url: process.env.NEXT_PUBLIC_ANIMATION_URL ?? '/animations/idle_loop.vrma', // 待機モーションのパス
   animation_procedural: process.env.NEXT_PUBLIC_ANIMATION_PROCEDURAL ?? 'false',   // プロシージャル（自動生成）アニメの有効化
@@ -137,7 +143,7 @@ export const defaults = {
   injection_fallback_user_context: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_USER_CONTEXT ?? '',
   injection_tts_pronunciation_fallback_rules:
     process.env.NEXT_PUBLIC_INJECTION_TTS_PRONUNCIATION_FALLBACK_RULES ??
-    '[{"from":"NFTDrive","to":"エヌエフティ　ドライブ","priority":100},{"from":"VRChat","to":"ブイアールチャット","priority":100},{"from":"中島理男","to":"なかしま　みちお","priority":100}]',
+    '[{"from":"NFTDrive","to":"エヌエフティ　ドライブ","priority":100},{"from":"VRChat","to":"ブイアールチャット","priority":100},{"from":"中島理男","to":"なかしま　みちお","priority":100},{"from":"Microsoft","to":"マイクロソフト","priority":95},{"from":"OpenAI","to":"オープンエーアイ","priority":95},{"from":"ChatGPT","to":"チャットジーピーティー","priority":95},{"from":"GitHub","to":"ギットハブ","priority":95},{"from":"Google","to":"グーグル","priority":95},{"from":"YouTube","to":"ユーチューブ","priority":95},{"from":"AWS","to":"エーダブリューエス","priority":95},{"from":"LLM","to":"エルエルエム","priority":90},{"from":"Claude","to":"クロード","priority":95},{"from":"Gemini","to":"ジェミニ","priority":95},{"from":"Copilot","to":"コパイロット","priority":95},{"from":"Anthropic","to":"アンスロピック","priority":90},{"from":"Azure","to":"アジュール","priority":95},{"from":"GCP","to":"ジーシーピー","priority":95},{"from":"Python","to":"パイソン","priority":95},{"from":"JavaScript","to":"ジャバスクリプト","priority":95},{"from":"TypeScript","to":"タイプスクリプト","priority":95},{"from":"React","to":"リアクト","priority":95},{"from":"Node.js","to":"ノード　ジェイエス","priority":95},{"from":"Docker","to":"ドッカー","priority":95},{"from":"Kubernetes","to":"クーベルネテス","priority":95},{"from":"Linux","to":"リナックス","priority":95},{"from":"Windows","to":"ウィンドウズ","priority":95},{"from":"VS Code","to":"ブイエス　コード","priority":95}]',
 
   // --- アイドル時・自律動作のタイミング設定 ---
   min_time_interval_sec: '10',     // 自律動作する最小間隔（秒）
@@ -206,8 +212,47 @@ export async function updateConfig(key: string, value: string) {
     // Sync update to server config
     await handleConfig("update", { key, value: normalizedValue });
 
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(CONFIG_UPDATED_EVENT, {
+          detail: { key, value: normalizedValue },
+        }),
+      );
+    }
+
   } catch (e) {
     console.error(`Error updating config for key "${key}": ${e}`);
+  }
+}
+
+/**
+ * 複数のキーを一括更新し、CONFIG_UPDATED_EVENT を1回だけ発火する。
+ * applyDomainOverrides など多数のキーを同時更新する場面で使うことで
+ * 余分な再レンダー・VRM 再ロードを防ぐ。
+ */
+export async function updateConfigBatch(entries: Array<[string, string]>) {
+  try {
+    for (const [key, value] of entries) {
+      const normalizedValue = normalizeConfigValue(key, value);
+      const localKey = prefixed(key);
+
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(localKey, normalizedValue);
+      }
+
+      await handleConfig("update", { key, value: normalizedValue });
+    }
+
+    // バッチ全体で1回だけイベントを発火する
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(CONFIG_UPDATED_EVENT, {
+          detail: { batch: true, keys: entries.map(([k]) => k) },
+        }),
+      );
+    }
+  } catch (e) {
+    console.error(`Error in updateConfigBatch: ${e}`);
   }
 }
 

@@ -10,6 +10,47 @@ export type ProcessResponseRetVal = {
   shouldBreak: boolean;
 }
 
+function normalizeSpacedUrls(input: string): string {
+  if (!input) {
+    return input;
+  }
+
+  // Example: "https:// www.r akuyo.ed.jp/infolist/" -> "https://www.rakuyo.ed.jp/infolist/"
+  const protocolUrlPattern = /(https?:\/\/(?:\s*[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%])+)/g;
+  const wwwUrlPattern = /(www\.(?:\s*[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%])+)/g;
+
+  return input
+    .replace(protocolUrlPattern, (match) => match.replace(/\s+/g, ""))
+    .replace(wwwUrlPattern, (match) => match.replace(/\s+/g, ""));
+}
+
+function isIncompleteUrlFragment(sentence: string): boolean {
+  const trimmed = sentence.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const withoutBullet = trimmed.replace(/^(?:[-*・]\s*)/, "");
+
+  // Wait until the model has produced a complete URL with a host and at least one dot.
+  if (/^(?:https?:\/\/|www\.)/i.test(withoutBullet)) {
+    const compact = withoutBullet.replace(/\s+/g, "");
+    if (!/^(?:https?:\/\/|www\.)[A-Za-z0-9\-_.]+\.[A-Za-z]{2,}(?:\/.*)?$/i.test(compact)) {
+      return true;
+    }
+  }
+
+  // Citation lines like "- https://" or "- www.r" should stay buffered until complete.
+  if (/^(?:[-*・]\s*)?(?:https?:\/\/|www\.)/i.test(trimmed)) {
+    const compact = trimmed.replace(/\s+/g, "");
+    if (!/\.[A-Za-z]{2,}/.test(compact)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // this function is used to process the response from the AI
 // it will call callback once it has a full "sentence" to speak
 // it returns updated variables for the next iteration
@@ -32,6 +73,20 @@ export function processResponse({
   callback: (aiTalks: Screenplay[]) => boolean,
 }): ProcessResponseRetVal {
   let shouldBreak = false;
+
+  // Keep source URLs intact even when the model inserts spaces between URL tokens.
+  receivedMessage = normalizeSpacedUrls(receivedMessage);
+
+  const extractUrlLine = (input: string): { sentence: string; rest: string } | null => {
+    const urlLineMatch = input.match(/^(?:\s*[-*・]\s*)?(?:https?:\/\/|www\.)[^\n]*(?:\n|$)/i);
+    if (!urlLineMatch || !urlLineMatch[0]) {
+      return null;
+    }
+
+    const sentence = urlLineMatch[0];
+    const rest = input.slice(sentence.length).trimStart();
+    return { sentence, rest };
+  };
 
   const thinkTagMatch = receivedMessage.match(/<\/?think>/);
   if (thinkTagMatch && thinkTagMatch[0]) {
@@ -57,16 +112,32 @@ export function processResponse({
     receivedMessage = receivedMessage.replace(rolePlay, '');
   }
 
+  // URL行は分割せず先に処理する（https://www.example.com が分解されるのを防止）
+  const extractedUrlLine = extractUrlLine(receivedMessage);
+
   // Cut out and process the response sentence by sentence
-  const sentenceMatch = receivedMessage.match(
-    /^(.+[\.\。\!\！\?\？\，\n]|.{10,}[,])/,
-  );
+  const sentenceMatch = extractedUrlLine
+    ? [extractedUrlLine.sentence]
+    : receivedMessage.match(/^(.+[\。\!\！\?\？\n]|.{24,}[、,])/);
   if (sentenceMatch && sentenceMatch[0]) {
     const sentence = sentenceMatch[0];
+
+    if (isIncompleteUrlFragment(sentence)) {
+      return {
+        sentences,
+        aiTextLog,
+        receivedMessage,
+        tag,
+        isThinking,
+        rolePlay,
+        shouldBreak,
+      };
+    }
+
     sentences.push(sentence);
-    receivedMessage = receivedMessage
-      .slice(sentence.length)
-      .trimStart();
+    receivedMessage = extractedUrlLine
+      ? extractedUrlLine.rest
+      : receivedMessage.slice(sentence.length).trimStart();
 
     // Skip if the string is unnecessary/impossible to utter.
     if (

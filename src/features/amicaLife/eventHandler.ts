@@ -74,6 +74,7 @@ let previousAnimation = "";
 async function handleVRMAnimationEvent(viewer: Viewer, amicaLife: AmicaLife) {
   if (!animationList || animationList.length === 0) {
     amicaLife.eventProcessing = false;
+    console.timeEnd("processing_event VRMA");
     return;
   }
 
@@ -88,13 +89,13 @@ async function handleVRMAnimationEvent(viewer: Viewer, amicaLife: AmicaLife) {
   //console.log("アイドルイベント処理中 (アニメーション):", previousAnimation);
 
   try {
-    if (viewer) {
+    if (viewer?.model && typeof (viewer.model as any).playAnimation === "function") {
       const animation = await loadVRMAnimation(randomAnimation);
       if (!animation) {
         throw new Error("Loading animation failed");
       }
       // @ts-ignore
-      const duration = await viewer.model!.playAnimation(animation, previousAnimation);
+      const duration = await viewer.model.playAnimation(animation, previousAnimation);
       requestAnimationFrame(() => { viewer.resetCameraLerp(); });
 
       // アニメーション再生時間分のタイムアウトを設定
@@ -102,9 +103,15 @@ async function handleVRMAnimationEvent(viewer: Viewer, amicaLife: AmicaLife) {
         amicaLife.eventProcessing = false;
         console.timeEnd("processing_event VRMA");
       }, duration * 1000);
+    } else {
+      console.debug("Skip VRMA event because viewer model is unavailable.");
+      amicaLife.eventProcessing = false;
+      console.timeEnd("processing_event VRMA");
     }
   } catch (error) {
     console.error("Error loading animation:", error);
+    amicaLife.eventProcessing = false;
+    console.timeEnd("processing_event VRMA");
   }
 }
 
@@ -136,14 +143,18 @@ export async function handleSleepEvent(chat: Chat, amicaLife: AmicaLife) {
   amicaLife.isSleep = true;
   try {
     const viewer = chat.viewer;
-    if (viewer) {
+    if (viewer?.model && typeof (viewer.model as any).playEmotion === "function") {
       // @ts-ignore
-      await viewer.model!.playEmotion("Sleep");
+      await viewer.model.playEmotion("Sleep");
+    } else {
+      console.debug("Skip sleep emotion because viewer model is unavailable.");
     }
     amicaLife.eventProcessing = false;
     console.timeEnd("processing_event Sleep");
   } catch (error) {
     console.error("Error playing emotion sleep:", error);
+    amicaLife.eventProcessing = false;
+    console.timeEnd("processing_event Sleep");
   }
 }
 
@@ -195,9 +206,14 @@ export async function handleSubconsciousEvent(
       : decipherEmotion;
     const emotionDecided = await askLLM(
       //`Based on your mini-diary, respond with dialougue that sounds like a normal person speaking about their mind, experience or feelings. Make sure to incorporate the specified emotion tags in your response. Here is the list of emotion tags that you have to include in the result : ${emotions
-      `ミニ日記をもとに、自分の心・経験・気持ちについて普通の人が話すような自然な台詞で答えてください。必ず以下の感情タグをレスポンスに含めてください：${emotions
+      `ミニ日記をもとに、自分の心・経験・気持ちについて普通の人が話すような自然な台詞で答えてください。
+必ず以下の感情タグをレスポンスに含めてください：${emotions
       .map((emotion) => `[${emotion}]`)
-        .join(", ")}:`,
+        .join(", ")}
+【言語制約】
+- 出力は必ず日本語のみ。
+- 中国語（簡体字・繁体字）は出力しない。
+- 不自然になった場合は短く言い直す。`,
       thirdStepPrompt,
       chat,
     );

@@ -134,7 +134,7 @@ export async function fetchInjectedContext(
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
       if (fetchErr.name === 'AbortError') {
-        console.warn('Injection API request timed out, trying cache fallback');
+        console.warn(`Injection API request timed out (domain=${targetDomainId}, endpoint=${endpoint}), trying cache fallback`);
       } else {
         console.warn('Injection API request failed:', fetchErr);
       }
@@ -202,11 +202,17 @@ export async function checkInjectionToolHealth(): Promise<boolean> {
 export async function fetchPublicDomainOptions(): Promise<Array<{
   id: string;
   label: string;
+  chronicleAttached?: boolean;
   bgUrl?: string;
   characterName?: string;
+  vrmEnabled?: boolean;
   vrmUrl?: string;
+  imageAvatarIdleUrl?: string;
+  imageAvatarTalkUrl?: string;
+  imageAvatarTalkIntervalMs?: number;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
+  ttsMuted?: boolean;
 }>> {
   try {
     const enabled =
@@ -263,14 +269,23 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
           .filter(
             (domain: any) =>
               typeof domain?.id === 'string' &&
-              (typeof domain?.name === 'string' || typeof domain?.label === 'string')
+              (typeof domain?.name === 'string' || typeof domain?.label === 'string') &&
+              domain?.enabled !== false
           )
           .map((domain: any) => ({
             id: String(domain.id).trim(),
             label: String(domain.name || domain.label).trim(),
+            chronicleAttached: Boolean(domain.chronicleAttached),
             bgUrl: typeof domain.bgUrl === 'string' ? domain.bgUrl.trim() : '',
             characterName: typeof domain.characterName === 'string' ? domain.characterName.trim() : '',
+            vrmEnabled: typeof domain.vrmEnabled === 'boolean' ? domain.vrmEnabled : true,
             vrmUrl: typeof domain.vrmUrl === 'string' ? domain.vrmUrl.trim() : '',
+            imageAvatarIdleUrl:
+              typeof domain.imageAvatarIdleUrl === 'string' ? domain.imageAvatarIdleUrl.trim() : '',
+            imageAvatarTalkUrl:
+              typeof domain.imageAvatarTalkUrl === 'string' ? domain.imageAvatarTalkUrl.trim() : '',
+            imageAvatarTalkIntervalMs:
+              typeof domain.imageAvatarTalkIntervalMs === 'number' ? domain.imageAvatarTalkIntervalMs : undefined,
             stylebertvits2ModelId:
               typeof domain.stylebertvits2ModelId === 'string'
                 ? domain.stylebertvits2ModelId.trim()
@@ -279,17 +294,24 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
               typeof domain.stylebertvits2Style === 'string'
                 ? domain.stylebertvits2Style.trim()
                 : '',
+            ttsMuted: typeof domain.ttsMuted === 'boolean' ? domain.ttsMuted : undefined,
           }))
           .filter((domain: { id: string; label: string }) => domain.id.length > 0 && domain.label.length > 0);
 
         const unique = new Map<string, {
           id: string;
           label: string;
+          chronicleAttached?: boolean;
           bgUrl?: string;
           characterName?: string;
+          vrmEnabled?: boolean;
           vrmUrl?: string;
+          imageAvatarIdleUrl?: string;
+          imageAvatarTalkUrl?: string;
+          imageAvatarTalkIntervalMs?: number;
           stylebertvits2ModelId?: string;
           stylebertvits2Style?: string;
+          ttsMuted?: boolean;
         }>();
         for (const domain of options) {
           if (!unique.has(domain.id)) {

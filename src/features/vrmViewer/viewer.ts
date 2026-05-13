@@ -114,6 +114,7 @@ export class Viewer {
   public isReady: boolean = false;
   public model?: Model;
   public room?: Room;
+  private vrmLoadQueue: Promise<void> = Promise.resolve();
 
   public renderer?: THREE.WebGLRenderer;
   private clock: THREE.Clock;
@@ -213,6 +214,12 @@ export class Viewer {
   }
 
   public async setup(canvas: HTMLCanvasElement) {
+    if (this.isReady) {
+      // 既にセットアップ済みの場合は再初期化しない。
+      // canvasRef の deps 変化で複数回呼ばれても安全。
+      console.log("setup canvas: already initialized, skipping");
+      return;
+    }
     console.log("setup canvas");
     const parentElement = canvas.parentElement;
     const width = parentElement?.clientWidth || canvas.width;
@@ -686,85 +693,90 @@ export class Viewer {
     url: string,
     setLoadingProgress: (progress: string) => void,
   ) {
-    if (this.model?.vrm) {
-      this.unloadVRM();
-    }
-    // Temp Disable : WebXR
-    // setLoadingProgress("Loading VRM");
-
-    // gltf and vrm
-    this.model = new Model(this.camera || new THREE.Object3D());
-    await this.model.loadVRM(url, setLoadingProgress);
-    // Temp Disable : WebXR
-    // setLoadingProgress("VRM loaded");
-    if (!this.model?.vrm) return;
-
-    // Temp Disable : WebXR
-    // build bvh
-    // this.modelBVHGenerator = new StaticGeometryGenerator(this.model.vrm.scene);
-    // setLoadingProgress("Creating geometry");
-
-    // TODO show during debug mode
-    const wireframeMaterial = new THREE.MeshBasicMaterial({
-      wireframe: true,
-      transparent: true,
-      opacity: 0.05,
-      depthWrite: false,
-    });
-    this.modelMeshHelper = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      wireframeMaterial,
-    );
-    this.modelTargets = [this.modelMeshHelper];
-
-    if (config("debug_gfx") === "true") {
-      this.scene!.add(this.modelMeshHelper);
-    }
-
-    this.modelBVHHelper = new MeshBVHHelper(this.modelMeshHelper);
-    if (config("debug_gfx") === "true") {
-      this.scene!.add(this.modelBVHHelper);
-    }
-
-    this.scene!.add(this.model.vrm.scene);
-
-    // TODO since poses still work for procedural animation, we can use this to debug
-    if (config("animation_procedural") !== "true") {
-      // Temp Disable : WebXR
-      // setLoadingProgress("Loading animation");
-      const animation =
-        config("animation_url").indexOf("vrma") > 0
-          ? await loadVRMAnimation(config("animation_url"))
-          : await loadMixamoAnimation(config("animation_url"), this.model?.vrm);
-      if (animation) {
-        await this.model.loadAnimation(animation);
-        this.model.update(0);
+    const runLoad = async () => {
+      if (this.model?.vrm) {
+        this.unloadVRM();
       }
-    }
+      // Temp Disable : WebXR
+      // setLoadingProgress("Loading VRM");
 
-    // Temp Disable : WebXR
-    // this.model?.vrm?.springBoneManager?.joints.forEach((e) => {
-    //   const geometry = new THREE.SphereGeometry(0.07, 16, 16);
-    //   const material = new THREE.MeshBasicMaterial({
-    //     color: 0xffff00,
-    //     transparent: true,
-    //     opacity: 0.5,
-    //     depthWrite: false,
-    //   });
-    //   const mesh = new THREE.Mesh(geometry, material);
-    //   mesh.position.copy(e.bone.getWorldPosition(new THREE.Vector3()));
-    //   // this.scene!.add(mesh);
-    // });
+      // gltf and vrm
+      this.model = new Model(this.camera || new THREE.Object3D());
+      await this.model.loadVRM(url, setLoadingProgress);
+      // Temp Disable : WebXR
+      // setLoadingProgress("VRM loaded");
+      if (!this.model?.vrm) return;
 
-    // Temp Disable : WebXR
-    // setLoadingProgress("Regenerating BVH");
-    // await this.regenerateBVHForModel();
+      // Temp Disable : WebXR
+      // build bvh
+      // this.modelBVHGenerator = new StaticGeometryGenerator(this.model.vrm.scene);
+      // setLoadingProgress("Creating geometry");
 
-    // Temp Disable : WebXR
-    // setLoadingProgress("Complete");
+      // TODO show during debug mode
+      const wireframeMaterial = new THREE.MeshBasicMaterial({
+        wireframe: true,
+        transparent: true,
+        opacity: 0.05,
+        depthWrite: false,
+      });
+      this.modelMeshHelper = new THREE.Mesh(
+        new THREE.BufferGeometry(),
+        wireframeMaterial,
+      );
+      this.modelTargets = [this.modelMeshHelper];
 
-    // HACK: Adjust the camera position after playback because the origin of the animation is offset
-    this.resetCamera();
+      if (config("debug_gfx") === "true") {
+        this.scene!.add(this.modelMeshHelper);
+      }
+
+      this.modelBVHHelper = new MeshBVHHelper(this.modelMeshHelper);
+      if (config("debug_gfx") === "true") {
+        this.scene!.add(this.modelBVHHelper);
+      }
+
+      this.scene!.add(this.model.vrm.scene);
+
+      // TODO since poses still work for procedural animation, we can use this to debug
+      if (config("animation_procedural") !== "true") {
+        // Temp Disable : WebXR
+        // setLoadingProgress("Loading animation");
+        const animation =
+          config("animation_url").indexOf("vrma") > 0
+            ? await loadVRMAnimation(config("animation_url"))
+            : await loadMixamoAnimation(config("animation_url"), this.model?.vrm);
+        if (animation) {
+          await this.model.loadAnimation(animation);
+          this.model.update(0);
+        }
+      }
+
+      // Temp Disable : WebXR
+      // this.model?.vrm?.springBoneManager?.joints.forEach((e) => {
+      //   const geometry = new THREE.SphereGeometry(0.07, 16, 16);
+      //   const material = new THREE.MeshBasicMaterial({
+      //     color: 0xffff00,
+      //     transparent: true,
+      //     opacity: 0.5,
+      //     depthWrite: false,
+      //   });
+      //   const mesh = new THREE.Mesh(geometry, material);
+      //   mesh.position.copy(e.bone.getWorldPosition(new THREE.Vector3()));
+      //   // this.scene!.add(mesh);
+      // });
+
+      // Temp Disable : WebXR
+      // setLoadingProgress("Regenerating BVH");
+      // await this.regenerateBVHForModel();
+
+      // Temp Disable : WebXR
+      // setLoadingProgress("Complete");
+
+      // HACK: Adjust the camera position after playback because the origin of the animation is offset
+      this.resetCamera();
+    };
+
+    this.vrmLoadQueue = this.vrmLoadQueue.then(runLoad, runLoad);
+    return this.vrmLoadQueue;
   }
 
   public unloadVRM(): void {

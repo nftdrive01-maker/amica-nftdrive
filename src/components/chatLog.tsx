@@ -124,15 +124,15 @@ export const ChatLog = ({
         ></IconButton>
       </div>
 
-      <div className="fixed w-col-span-6 max-w-full h-full pb-16">
+      <div className="fixed w-col-span-6 max-w-full h-screen overflow-hidden">
 
-        <div className="max-h-full px-16 pt-20 pb-4 overflow-y-auto scroll-hidden">
+        <div className="h-full px-16 pt-20 pb-36 overflow-y-auto scroll-hidden">
           {messages.map((msg, i) => {
             return (
               <div key={i} ref={messages.length - 1 === i ? chatScrollRef : null}>
                 <Chat
                   role={msg.role}
-                  message={(msg.content as string).replace(/\[(.*?)\]/g, "")}
+                  message={(msg.content as string)}
                   num={i}
                   onClickResumeButton={handleResumeButtonClick}
                 />
@@ -153,9 +153,9 @@ export const ChatLog = ({
   );
 };
 
-function renderWithLinks(text: string): ReactNode[] {
+function renderWithLinks(line: string): ReactNode[] {
   const linkRegex = /((?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?)/g;
-  const parts = text.split(linkRegex);
+  const parts = line.split(linkRegex);
   return parts.map((part, i) => {
     const trimmed = part.trim();
     const isUrlLike = /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?$/.test(trimmed);
@@ -178,6 +178,45 @@ function renderWithLinks(text: string): ReactNode[] {
   });
 }
 
+function renderMultilineWithLinks(text: string): ReactNode[] {
+  const lines = text.split(/\r?\n/);
+  return lines.map((line, index) => (
+    <div key={`line-${index}`}>{renderWithLinks(line)}</div>
+  ));
+}
+
+function renderMultilineWithLinksSm(text: string): ReactNode[] {
+  const lines = text.split(/\r?\n/);
+  return lines.map((line, index) => (
+    <div key={`line-${index}-sm`} style={{fontSize: '10px', fontWeight: 'normal', color: '#9ca3af', lineHeight: '1rem'}}>{renderWithLinks(line)}</div>
+  ));
+}
+
+function splitChronicleBlock(text: string): {
+  chipLabel: string | null;
+  chronicleContent: string | null;
+  plainMessage: string;
+} {
+  const match = text.match(/^\[\[CHRONICLE_TITLE:([^\]]+)\]\]\n([\s\S]*?)\n\[\[\/CHRONICLE\]\]\n*/);
+  if (!match) {
+    return {
+      chipLabel: null,
+      chronicleContent: null,
+      plainMessage: text,
+    };
+  }
+
+  return {
+    chipLabel: (match[1] || 'CHRONICLE').trim(),
+    chronicleContent: (match[2] || '').trim(),
+    plainMessage: text.slice(match[0].length),
+  };
+}
+
+function stripEmotionTags(text: string): string {
+  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust)\]\s*/gi, '');
+}
+
 function Chat({
   role,
   message,
@@ -190,12 +229,9 @@ function Chat({
   onClickResumeButton: (num: number, message: string) => void;
 }) {
   const { t } = useTranslation();
+  const normalizedMessage = stripEmotionTags(message);
+  const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(normalizedMessage);
   // const [textAreaValue, setTextAreaValue] = useState(message);
-
-  const onClickButton = () => {
-    const newMessage = message
-    onClickResumeButton(num, newMessage);
-  };
 
 
 
@@ -206,29 +242,42 @@ function Chat({
     )}>
       <div
         className={clsx(
-          'px-8 py-2 rounded-t-lg font-bold tracking-wider flex justify-between shadow-inner backdrop-blur-lg',
+          'px-6 py-2 rounded-t-lg font-bold tracking-wider flex justify-between shadow-inner backdrop-blur-lg',
           role === "assistant" ? "bg-pink-600/80" : "bg-cyan-600/80",
         )}
       >
-        <div className="text-bold text-white">
+        <div className="text-sm font-bold text-white">
           {role === "assistant" && config('name').toUpperCase()}
           {role === "user" && t("YOU")}
         </div>
-        <button
-          className="text-right"
-          onClick={onClickButton}
-        >
-          {role === "user" && (
-            <div className="ml-16 p-1 rounded-full">
-              <ArrowPathIcon className="h-5 w-5 hover:animate-spin text-white" aria-hidden="true" />
-            </div>
-          )}
-        </button>
       </div>
-      <div className="px-4 py-2 bg-white/80 backdrop-blur-lg rounded-b-lg shadow-sm">
-        <div className='typography-16 font-M_PLUS_2 font-bold text-gray-800'>
+      <div className="px-4 pt-3 pb-2 bg-white/80 backdrop-blur-lg rounded-b-lg shadow-sm">
+        <div className='typography-16 font-M_PLUS_2 font-bold text-gray-800 whitespace-pre-wrap break-words leading-relaxed'>
           {role === "assistant" ? (
-            <div>{renderWithLinks(message)}</div>
+            <div>
+              {chipLabel && chronicleContent && (() => {
+                // --- 出典 --- で分割し、前半:本文, 後半:出典
+                const citationSeparator = /--- 出典 ---/;
+                const [mainText, ...citationParts] = chronicleContent.split(citationSeparator);
+                const citationText = citationParts.length > 0 ? citationParts.join('--- 出典 ---') : null;
+                return (
+                  <div className="mb-3 rounded-md border border-cyan-300 bg-cyan-50 p-3">
+                    <div className="mb-2 inline-flex items-center rounded-full border border-cyan-400 bg-white px-2 py-0.5 text-xs font-bold text-cyan-700">
+                      {chipLabel}
+                    </div>
+                    <div className="typography-16 font-M_PLUS_2 text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
+                      {renderMultilineWithLinks(mainText.trim())}
+                      {citationText && (
+                        <div className="mt-4 border-t border-cyan-200 pt-2">
+                          {renderMultilineWithLinksSm('--- 出典 ---' + citationText)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              <div>{renderMultilineWithLinks(plainMessage)}</div>
+            </div>
           ) : (
             <FlexTextarea
               value={message}

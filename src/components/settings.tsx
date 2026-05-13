@@ -158,6 +158,9 @@ export const Settings = ({
   const [vrmUrl, setVrmUrl] = useState(config("vrm_url"));
   const [vrmHash, setVrmHash] = useState(config("vrm_hash"));
   const [vrmSaveType, setVrmSaveType] = useState(config('vrm_save_type'));
+  const [imageAvatarIdleUrl, setImageAvatarIdleUrl] = useState(config('image_avatar_idle_url'));
+  const [imageAvatarTalkUrl, setImageAvatarTalkUrl] = useState(config('image_avatar_talk_url'));
+  const [imageAvatarTalkIntervalMs, setImageAvatarTalkIntervalMs] = useState<number>(parseInt(config('image_avatar_talk_interval_ms')) || 180);
   const [youtubeVideoID, setYoutubeVideoID] = useState(config("youtube_videoid"));
   const [animationUrl, setAnimationUrl] = useState(config("animation_url"));
   const [animationProcedural, setAnimationProcedural] = useState<boolean>(config("animation_procedural") === 'true' ? true : false);
@@ -191,15 +194,34 @@ export const Settings = ({
   const [mtoonMaterialType, setMtoonMaterialType] = useState(config('mtoon_material_type'));
   const [useWebGPU, setUseWebGPU] = useState<boolean>(config("use_webgpu") === 'true' ? true : false);
 
+  const suppressOutsideCloseUntilRef = useRef(0);
+  const markFilePickerInteraction = useCallback((ms = 1500) => {
+    suppressOutsideCloseUntilRef.current = Date.now() + ms;
+  }, []);
+
   const vrmFileInputRef = useRef<HTMLInputElement>(null);
   const handleClickOpenVrmFile = useCallback(() => {
+    markFilePickerInteraction();
     vrmFileInputRef.current?.click();
-  }, []);
+  }, [markFilePickerInteraction]);
 
   const bgImgFileInputRef = useRef<HTMLInputElement>(null);
   const handleClickOpenBgImgFile = useCallback(() => {
+    markFilePickerInteraction();
     bgImgFileInputRef.current?.click();
-  }, []);
+  }, [markFilePickerInteraction]);
+
+  const imageAvatarIdleFileInputRef = useRef<HTMLInputElement>(null);
+  const handleClickOpenImageAvatarIdleFile = useCallback(() => {
+    markFilePickerInteraction();
+    imageAvatarIdleFileInputRef.current?.click();
+  }, [markFilePickerInteraction]);
+
+  const imageAvatarTalkFileInputRef = useRef<HTMLInputElement>(null);
+  const handleClickOpenImageAvatarTalkFile = useCallback(() => {
+    markFilePickerInteraction();
+    imageAvatarTalkFileInputRef.current?.click();
+  }, [markFilePickerInteraction]);
 
   const topMenuRef = useRef<HTMLDivElement>(null);
   const backButtonRef = useRef<HTMLDivElement>(null);
@@ -208,6 +230,7 @@ export const Settings = ({
 
   const handleChangeVrmFile = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
+      markFilePickerInteraction(600);
       const files = event.target.files;
       if (!files) return;
 
@@ -222,10 +245,11 @@ export const Settings = ({
 
       event.target.value = "";
     },
-    [viewer]
+    [viewer, markFilePickerInteraction]
   );
 
   function handleChangeBgImgFile(event: React.ChangeEvent<HTMLInputElement>) {
+    markFilePickerInteraction(600);
     const files = event.target.files;
     if (!files) return;
 
@@ -256,6 +280,50 @@ export const Settings = ({
 
     reader.readAsDataURL(file);
 
+    event.target.value = "";
+  }
+
+  function handleChangeImageAvatarIdleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    markFilePickerInteraction(600);
+    const files = event.target.files;
+    if (!files) return;
+
+    const file = files[0];
+    if (!file) return;
+    if (!file.type.match('image.*')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      if (!dataUrl) return;
+      setImageAvatarIdleUrl(dataUrl);
+      void updateConfig('image_avatar_idle_url', dataUrl);
+      setSettingsUpdated(true);
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }
+
+  function handleChangeImageAvatarTalkFile(event: React.ChangeEvent<HTMLInputElement>) {
+    markFilePickerInteraction(600);
+    const files = event.target.files;
+    if (!files) return;
+
+    const file = files[0];
+    if (!file) return;
+    if (!file.type.match('image.*')) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      if (!dataUrl) return;
+      setImageAvatarTalkUrl(dataUrl);
+      void updateConfig('image_avatar_talk_url', dataUrl);
+      setSettingsUpdated(true);
+    };
+
+    reader.readAsDataURL(file);
     event.target.value = "";
   }
 
@@ -316,6 +384,10 @@ export const Settings = ({
 
   useEffect(() => {
     function click(e: MouseEvent) {
+      if (Date.now() < suppressOutsideCloseUntilRef.current) {
+        return;
+      }
+
       const target = e.target as HTMLElement;
       // console.log('click', target);
       if (mainMenuRef.current?.contains(target)) {
@@ -440,11 +512,19 @@ export const Settings = ({
           vrmUrl={vrmUrl}
           vrmSaveType={vrmSaveType}
           vrmList={vrmList}
+          imageAvatarIdleUrl={imageAvatarIdleUrl}
+          imageAvatarTalkUrl={imageAvatarTalkUrl}
+          imageAvatarTalkIntervalMs={imageAvatarTalkIntervalMs}
           setVrmHash={setVrmHash}
           setVrmUrl={setVrmUrl}
           setVrmSaveType={setVrmSaveType}
+          setImageAvatarIdleUrl={setImageAvatarIdleUrl}
+          setImageAvatarTalkUrl={setImageAvatarTalkUrl}
+          setImageAvatarTalkIntervalMs={setImageAvatarTalkIntervalMs}
           setSettingsUpdated={setSettingsUpdated}
           handleClickOpenVrmFile={handleClickOpenVrmFile}
+          handleClickOpenImageAvatarIdleFile={handleClickOpenImageAvatarIdleFile}
+          handleClickOpenImageAvatarTalkFile={handleClickOpenImageAvatarTalkFile}
         />
 
       case 'character_animation':
@@ -926,6 +1006,20 @@ export const Settings = ({
         accept=".jpg,.jpeg,.png,.gif,.webp"
         ref={bgImgFileInputRef}
         onChange={handleChangeBgImgFile}
+      />
+      <input
+        type="file"
+        className="hidden"
+        accept=".jpg,.jpeg,.png,.webp"
+        ref={imageAvatarIdleFileInputRef}
+        onChange={handleChangeImageAvatarIdleFile}
+      />
+      <input
+        type="file"
+        className="hidden"
+        accept=".jpg,.jpeg,.png,.webp"
+        ref={imageAvatarTalkFileInputRef}
+        onChange={handleChangeImageAvatarTalkFile}
       />
     </div>
   );

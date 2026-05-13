@@ -59,6 +59,14 @@ function parseFallbackRules(): PronunciationRule[] {
   }
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isAsciiWordRule(text: string): boolean {
+  return /^[A-Za-z0-9 ._+\-]+$/.test(text);
+}
+
 function applyRules(message: string, rules: PronunciationRule[]): string {
   let result = message;
   const sorted = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
@@ -68,7 +76,19 @@ function applyRules(message: string, rules: PronunciationRule[]): string {
       continue;
     }
 
-    result = result.split(rule.from).join(rule.to);
+    const from = rule.from.trim();
+    if (!from) {
+      continue;
+    }
+
+    // ASCII語は大文字小文字の揺れを許容し、単語境界で置換する。
+    if (isAsciiWordRule(from)) {
+      const pattern = new RegExp(`\\b${escapeRegExp(from)}\\b`, 'gi');
+      result = result.replace(pattern, rule.to);
+      continue;
+    }
+
+    result = result.split(from).join(rule.to);
   }
 
   return result;

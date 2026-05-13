@@ -16,7 +16,7 @@ export const UserText = ({ message }: { message: string }) => {
   });
 
   return (
-    <div className="fixed bottom-0 left-0 mb-20 w-full">
+    <div className="fixed bottom-0 left-0 mb-28 w-full">
       <div className="mx-auto max-w-4xl w-full px-4 md:px-16">
         <div className="backdrop-blur-lg rounded-lg">
           <div className="bg-white/70 rounded-lg backdrop-blur-lg shadow-lg">
@@ -27,7 +27,7 @@ export const UserText = ({ message }: { message: string }) => {
             </div>
 
             <div className="px-8 py-4 max-h-32 overflow-y-auto">
-              <div className="min-h-8 max-h-full typography-16 font-bold text-gray-600">
+              <div className="min-h-8 max-h-full typography-16 font-bold text-gray-600 whitespace-pre-wrap break-words leading-relaxed">
                 {message.replace(/\[([a-zA-Z]*?)\]/g, "")}
                 <div ref={scrollRef} />
               </div>

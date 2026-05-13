@@ -14,8 +14,8 @@ export const SubconciousText = ({ messages }: { messages: TimestampedPrompt[] })
     }, [messages]);
 
     return (
-        <div className="fixed w-col-span-6 max-w-full h-full pb-16">
-            <div className="max-h-full px-16 pt-20 pb-4 overflow-y-auto scroll-hidden">
+        <div className="fixed w-col-span-6 max-w-full h-full pb-36">
+            <div className="max-h-full px-16 pt-20 pb-10 overflow-y-auto scroll-hidden">
                 {messages.map((msg, i) => {
                     return (
                         <div key={i} ref={messages.length - 1 === i ? chatScrollRef : null}>

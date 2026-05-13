@@ -27,6 +27,10 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 # ENV NEXT_TELEMETRY_DISABLED 1
 
+# Dummy values to allow static page generation during build (import/[sqid] uses Supabase)
+ENV NEXT_PUBLIC_SUPABASE_URL=http://placeholder
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
+
 RUN yarn build
 
 # If using npm comment out above and use below instead

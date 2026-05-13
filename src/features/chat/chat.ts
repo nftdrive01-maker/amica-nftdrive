@@ -52,13 +52,81 @@ type Speak = {
   screenplay: Screenplay;
   streamIdx: number;
   domainId?: string;
+  bubbleToChat?: boolean;
 };
 
 type TTSJob = {
   screenplay: Screenplay;
   streamIdx: number;
   domainId?: string;
+  bubbleToChat?: boolean;
 };
+
+const AMICA_LIFE_JAPANESE_RULE = [
+  "【Amica Life 言語ルール】",
+  "- 応答は必ず自然な日本語で行う。",
+  "- 中国語（簡体字・繁体字）の文は出力しない。",
+  "- 不自然な文になった場合は、短く日本語で言い直す。",
+].join("\n");
+
+const CHRONICLE_TRIGGER_MARKER = '[[USE_CHRONICLE]]';
+
+function summarizeChronicleMainContent(content: string, maxLen = 180): string {
+  const mainSection = (content.split(/---\s*出典\s*---/)[0] || content)
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && line !== "出典")
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!mainSection) {
+    return "";
+  }
+
+  const sentences = mainSection
+    .split(/(?<=[。！？.!?])\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  let summary = "";
+  for (const sentence of sentences) {
+    if (!summary) {
+      summary = sentence;
+      if (summary.length >= maxLen) {
+        break;
+      }
+      continue;
+    }
+
+    const candidate = `${summary} ${sentence}`;
+    if (candidate.length > maxLen) {
+      break;
+    }
+    summary = candidate;
+  }
+
+  if (!summary) {
+    summary = mainSection.slice(0, maxLen);
+  }
+
+  return summary.trim();
+}
+
+function buildTtsSafeReactionText(text: string, maxLen = 120): string {
+  const normalized = text
+    .replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust)\]\s*/gi, "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (normalized.length <= maxLen) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
 
 export class Chat {
   public initialized: boolean;
@@ -72,6 +140,14 @@ export class Chat {
     return text
       // URLを除去（TTSで読み上げないようにする）
       .replace(/https?:\/\/[^\s]+/g, "")
+      // www 形式URLを除去
+      .replace(/\bwww\.[^\s]+/gi, "")
+      // スキームなしドメイン（例: example.com/path）を除去
+      .replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[\w\-./?%&=+#~:]*)?/gi, "")
+      // 出典URLの見出し行を除去
+      .replace(/(?:^|\n)\s*(?:出典URL|参照URL)\s*[:：]\s*(?=\n|$)/g, "\n")
+      // URLのみの箇条書き行を除去
+      .replace(/(?:^|\n)\s*[-*・]\s*(?:https?:\/\/|www\.)[^\n]*/g, "\n")
       // Markdownの水平線っぽい記号列を削除
       .replace(/(^|\n)\s*[-_*＝=]{3,}\s*(?=\n|$)/g, "\n")
       // 連続ハイフン/アンダーバー等を空白化
@@ -83,6 +159,28 @@ export class Chat {
       // 余分な空白を整理
       .replace(/\s{2,}/g, " ")
       .trim();
+  }
+
+  private containsLikelyChinese(text: string): boolean {
+    if (!text) {
+      return false;
+    }
+
+    const normalized = text.replace(/\s+/g, "").trim();
+    if (!normalized) {
+      return false;
+    }
+
+    // Japanese text usually contains kana; kana-first check avoids over-blocking kanji-only words.
+    if (/[ぁ-んァ-ヶ]/.test(normalized)) {
+      return false;
+    }
+
+    const hasSimplifiedOnlyChars = /[这们说时会开见来对为是个国后里没从点]/.test(normalized);
+    const chineseFunctionWords = normalized.match(/的|了|在|是|我|你|他|她|们|不|有|和|也|都|很|吗|呢|啊|吧|着/g) || [];
+    const cjkChars = normalized.match(/[\u4E00-\u9FFF]/g) || [];
+
+    return hasSimplifiedOnlyChars || (cjkChars.length >= 6 && chineseFunctionWords.length >= 2);
   }
 
 
@@ -111,6 +209,7 @@ export class Chat {
   private currentAssistantMessage: string;
   private currentUserMessage: string;
   private thoughtMessage: string;
+  private pendingChronicleDecoratedBlock: string;
 
   private lastAwake: number;
 
@@ -134,11 +233,51 @@ export class Chat {
     this.currentAssistantMessage = "";
     this.currentUserMessage = "";
     this.thoughtMessage = "";
+    this.pendingChronicleDecoratedBlock = "";
 
     this.messageList = [];
     this.currentStreamIdx = 0;
 
     this.lastAwake = 0;
+  }
+
+  private buildChronicleDecoratedBlock(input?: {
+    title?: string;
+    content?: string;
+    sourceName?: string;
+  }): string {
+    const content = typeof input?.content === "string" ? input.content.trim() : "";
+    if (!content) {
+      return "";
+    }
+
+    const title = (input?.title || "CHRONICLE").trim();
+    const source = input?.sourceName ? ` (${input.sourceName})` : "";
+
+    return `[[CHRONICLE_TITLE:${title}${source}]]\n${content}\n[[/CHRONICLE]]\n\n`;
+  }
+
+  private buildChronicleReactionMessage(options: {
+    used?: boolean;
+    error?: string;
+    sourceName?: string;
+    content?: string;
+  }): string {
+    if (options.used) {
+      const source = options.sourceName ? `（${options.sourceName}）` : "";
+      const summary = typeof options.content === "string"
+        ? summarizeChronicleMainContent(options.content)
+        : "";
+
+      if (summary) {
+        return `[neutral] CHRONICLE${source}の結果を整理します。要点は「${summary}」です。必要なら、この内容をもとに優先度つきで次のアクションを具体化します。`;
+      }
+
+      return `[neutral] CHRONICLE${source}の結果を整理しました。重要ポイントを優先順位つきで説明できるので、必要なら次に実行する項目まで具体化します。`;
+    }
+
+    const reason = options.error ? `（${options.error}）` : "";
+    return `[neutral] CHRONICLEの取得に失敗しました${reason}。接続先やタイムアウト設定を確認しつつ、必要なら再実行します。`;
   }
 
   public initialize(
@@ -243,6 +382,7 @@ export class Chat {
           screenplay: ttsJob.screenplay,
           streamIdx: ttsJob.streamIdx,
           domainId: ttsJob.domainId,
+          bubbleToChat: ttsJob.bubbleToChat,
         });
       } while (this.ttsJobs.size() > 0);
       await wait(50);
@@ -261,6 +401,13 @@ export class Chat {
           continue;
         }
 
+        console.debug("speak dequeue", {
+          streamIdx: speak.streamIdx,
+          currentStreamIdx: this.currentStreamIdx,
+          text: speak.screenplay.text,
+          hasAudioBuffer: !!speak.audioBuffer,
+        });
+
         if ((window as any).chatvrm_latency_tracker) {
           if ((window as any).chatvrm_latency_tracker.active) {
             const ms =
@@ -270,11 +417,48 @@ export class Chat {
           }
         }
 
-        this.bubbleMessage("assistant", speak.screenplay.text);
+        if (speak.bubbleToChat !== false) {
+          this.bubbleMessage("assistant", speak.screenplay.text);
+        }
+
+        if (config("tts_muted") === "true") {
+          this.setChatSpeaking!(false);
+          this.isAwake() ? this.updateAwake() : null;
+          continue;
+        }
 
         if (speak.audioBuffer) {
           this.setChatSpeaking!(true);
-          await this.viewer!.model?.speak(speak.audioBuffer, speak.screenplay);
+          console.debug("speak start", {
+            streamIdx: speak.streamIdx,
+            text: speak.screenplay.text,
+          });
+          if (this.viewer?.model) {
+            await this.viewer.model.speak(speak.audioBuffer, speak.screenplay);
+          } else {
+            // VRM非表示時：AudioContextで直接音声再生し、終了まで待機
+            await new Promise<void>((resolve) => {
+              try {
+                const audioCtx = new AudioContext();
+                audioCtx.decodeAudioData(speak.audioBuffer!.slice(0), (decoded) => {
+                  const source = audioCtx.createBufferSource();
+                  source.buffer = decoded;
+                  source.connect(audioCtx.destination);
+                  source.start();
+                  source.addEventListener("ended", () => {
+                    audioCtx.close();
+                    resolve();
+                  });
+                }, () => resolve());
+              } catch {
+                resolve();
+              }
+            });
+          }
+          console.debug("speak end", {
+            streamIdx: speak.streamIdx,
+            text: speak.screenplay.text,
+          });
           this.setChatSpeaking!(false);
           this.isAwake() ? this.updateAwake() : null;
         }
@@ -401,6 +585,17 @@ export class Chat {
       return;
     }
 
+    const hasChronicleMarker = typeof message === 'string' && message.includes(CHRONICLE_TRIGGER_MARKER);
+    const normalizedMessage = typeof message === 'string'
+      ? message.replaceAll(CHRONICLE_TRIGGER_MARKER, '').trim()
+      : '';
+
+    if (!normalizedMessage) {
+      return;
+    }
+
+    message = normalizedMessage;
+
     console.time("performance_interrupting");
     console.debug("interrupting...");
     await this.interrupt();
@@ -425,13 +620,98 @@ export class Chat {
     }
 
     // Fetch injected context from injection-tool (fail-open)
-    const userTextForInjection = amicaLife ? message : this.currentUserMessage;
+    const userTextForModel = amicaLife ? message : this.currentUserMessage;
+    const userTextForInjection = hasChronicleMarker
+      ? `${CHRONICLE_TRIGGER_MARKER} ${userTextForModel}`
+      : userTextForModel;
     const effectiveDomainId = domainId || undefined;
+
+    console.debug('[CHRONICLE] request', {
+      domainId: effectiveDomainId ?? 'default',
+      markerDetected: hasChronicleMarker,
+      messageLength: userTextForModel.length,
+    });
 
     const injected = await fetchInjectedContext(
       userTextForInjection,
       effectiveDomainId
     );
+
+    if (injected.metadata) {
+      console.debug('[CHRONICLE] metadata', {
+        domainId: injected.metadata.domainId,
+        attached: injected.metadata.chronicleAttached,
+        triggered: injected.metadata.chronicleTriggered,
+        used: injected.metadata.chronicleUsed,
+        name: injected.metadata.chronicleName,
+        error: injected.metadata.chronicleError,
+      });
+    } else {
+      console.debug('[CHRONICLE] metadata unavailable (intercept fallback or empty response)');
+    }
+
+    const chronicleRequested = Boolean(hasChronicleMarker || injected.metadata?.chronicleTriggered);
+    if (chronicleRequested) {
+      const chronicleContent = typeof injected.chronicle?.content === 'string'
+        ? injected.chronicle.content.trim()
+        : '';
+
+      if (injected.metadata?.chronicleUsed && chronicleContent) {
+        const chronicleOnlyBlock = this.buildChronicleDecoratedBlock(injected.chronicle);
+        if (chronicleOnlyBlock) {
+          const reactionMessage = this.buildChronicleReactionMessage({
+            used: true,
+            sourceName: injected.metadata?.chronicleName,
+            content: chronicleContent,
+          });
+          const reactionTtsMessage = buildTtsSafeReactionText(reactionMessage, 120);
+          const reactionScreenplay = textsToScreenplay([reactionTtsMessage])[0];
+          if (reactionScreenplay) {
+            this.ttsJobs.enqueue({
+              screenplay: reactionScreenplay,
+              streamIdx: this.currentStreamIdx,
+              domainId: effectiveDomainId,
+              bubbleToChat: false,
+            });
+          }
+          this.bubbleMessage("assistant", chronicleOnlyBlock);
+          this.bubbleMessage("assistant", reactionMessage);
+          return;
+        }
+      }
+
+      const chronicleErrorText = injected.metadata?.chronicleError || 'CHRONICLE応答を取得できませんでした。';
+      const chronicleErrorBlock = this.buildChronicleDecoratedBlock({
+        title: 'CHRONICLE',
+        sourceName: injected.metadata?.chronicleName,
+        content: `取得に失敗しました: ${chronicleErrorText}`,
+      });
+
+      if (chronicleErrorBlock) {
+        this.bubbleMessage("assistant", chronicleErrorBlock);
+      }
+      const failureReactionMessage = this.buildChronicleReactionMessage({
+        used: false,
+        error: injected.metadata?.chronicleError,
+        sourceName: injected.metadata?.chronicleName,
+      });
+
+      const failureReactionTtsMessage = buildTtsSafeReactionText(failureReactionMessage, 120);
+      const failureReactionScreenplay = textsToScreenplay([failureReactionTtsMessage])[0];
+      if (failureReactionScreenplay) {
+        this.ttsJobs.enqueue({
+          screenplay: failureReactionScreenplay,
+          streamIdx: this.currentStreamIdx,
+          domainId: effectiveDomainId,
+          bubbleToChat: false,
+        });
+      }
+
+      this.bubbleMessage("assistant", failureReactionMessage);
+      return;
+    }
+
+    this.pendingChronicleDecoratedBlock = this.buildChronicleDecoratedBlock(injected.chronicle);
 
     // Compose system prompt with injected context
     let systemPrompt: string;
@@ -441,16 +721,20 @@ export class Chat {
       systemPrompt = config("system_prompt");
     }
 
+    if (amicaLife) {
+      systemPrompt = `${systemPrompt}\n\n${AMICA_LIFE_JAPANESE_RULE}`;
+    }
+
     // make new stream (userはユーザーの質問のみ、ナレッジはsystemに統合済み)
     const messages: Message[] = [
       { role: "system", content: systemPrompt },
       ...this.messageList!,
-      { role: "user", content: userTextForInjection },
+      { role: "user", content: userTextForModel },
     ];
 
     // console.debug('messages', messages);
 
-    await this.makeAndHandleStream(messages, effectiveDomainId);
+    await this.makeAndHandleStream(messages, effectiveDomainId, amicaLife);
   }
 
   public initSSE() {
@@ -555,7 +839,7 @@ export class Chat {
     }
   }
 
-  public async makeAndHandleStream(messages: Message[], domainId?: string) {
+  public async makeAndHandleStream(messages: Message[], domainId?: string, amicaLife: boolean = false) {
     try {
       this.streams.push(await this.getChatResponseStream(messages));
     } catch (e: any) {
@@ -572,10 +856,10 @@ export class Chat {
       return errMsg;
     }
 
-    return await this.handleChatResponseStream(domainId);
+    return await this.handleChatResponseStream(domainId, amicaLife);
   }
 
-  public async handleChatResponseStream(domainId?: string) {
+  public async handleChatResponseStream(domainId?: string, amicaLife: boolean = false) {
     if (this.streams.length === 0) {
       console.log("no stream!");
       return;
@@ -595,6 +879,12 @@ export class Chat {
     let isThinking = false;
     let rolePlay = "";
     let receivedMessage = "";
+    let insertedJapaneseFallback = false;
+
+    if (this.pendingChronicleDecoratedBlock) {
+      this.bubbleMessage("assistant", this.pendingChronicleDecoratedBlock);
+      this.pendingChronicleDecoratedBlock = "";
+    }
 
     let firstTokenEncountered = false;
     let firstSentenceEncountered = false;
@@ -631,7 +921,27 @@ export class Chat {
               return true; // should break
             }
 
+            if (amicaLife) {
+              const currentText = aiTalks[0]?.talk?.message || aiTalks[0]?.text || "";
+              if (this.containsLikelyChinese(currentText)) {
+                if (insertedJapaneseFallback) {
+                  return false;
+                }
+
+                insertedJapaneseFallback = true;
+                aiTalks[0].text = "[neutral] すみません、日本語で言い直します。もう一度聞いてくれる？";
+                aiTalks[0].talk.message = "すみません、日本語で言い直します。もう一度聞いてくれる？";
+                aiTalks[0].expression = "neutral";
+                aiTalks[0].talk.style = "talk";
+              }
+            }
+
             if (!isThinking) {
+              console.debug("tts enqueue", {
+                streamIdx,
+                text: aiTalks[0].text,
+                hasAudio: true,
+              });
               this.ttsJobs.enqueue({
                 screenplay: aiTalks[0],
                 streamIdx: streamIdx,

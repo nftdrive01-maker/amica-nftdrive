@@ -1,10 +1,11 @@
-import { Dispatch, PropsWithChildren, SetStateAction, createContext, useContext, useEffect, useReducer, useState } from "react";
+import { Dispatch, PropsWithChildren, SetStateAction, createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { VrmData } from "./vrmData";
 import { vrmList } from "@/paths";
 import { thumbPrefix } from "@/components/settings/common";
 import { AddItemCallbackType, VrmStoreActionType, vrmStoreReducer } from "./vrmStoreReducer";
 import { Viewer } from "../vrmViewer/viewer";
-import { config, updateConfig } from "@/utils/config";
+import { config, defaultConfig, updateConfig } from "@/utils/config";
+import { handleConfig } from "@/features/externalAPI/externalAPI";
 
 interface VrmStoreContextType {
     getCurrentVrm: () => VrmData | undefined;
@@ -27,8 +28,10 @@ export const VrmStoreContext = createContext<VrmStoreContextType>({
 
 export const VrmStoreProvider = ({ children }: PropsWithChildren<{}>): JSX.Element => {
     const [isLoadingVrmList, setIsLoadingVrmList] = useState(true);
+    const [configInitialized, setConfigInitialized] = useState(false);
     const [loadedVrmList, vrmListDispatch] = useReducer(vrmStoreReducer, vrmInitList);
-    const vrmListAddFile = (file: File, viewer: Viewer) => {
+    
+    const vrmListAddFile = useCallback((file: File, viewer: Viewer) => {
         vrmListDispatch({ type: VrmStoreActionType.addItem, itemFile: file, callback: (callbackProp: AddItemCallbackType) => {
             viewer.loadVrm(callbackProp.url, (progress: string) => {
               // TODO handle loading progress
@@ -46,21 +49,46 @@ export const VrmStoreProvider = ({ children }: PropsWithChildren<{}>): JSX.Eleme
                 });
               });
         }});
-    };
+    // vrmListDispatch は React の useReducer dispatch であり参照が安定している
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Wait for config initialization to complete before loading VRM list from storage
+    useEffect(() => {
+        (async () => {
+            if (typeof window !== "undefined") {
+                await handleConfig("init");
+                
+                // Domain-specific avatar/VRM config is applied from MessageInput.
+                // Avoid writing the same keys here to prevent startup race conditions.
+            }
+            setConfigInitialized(true);
+        })();
+    }, []);
 
     useEffect(() => {
+        if (!configInitialized) return;
+        
         vrmListDispatch({ type: VrmStoreActionType.loadFromLocalStorage, vrmList: vrmInitList, callback: (updatedVmList: VrmData[]) => {
             vrmListDispatch({ type: VrmStoreActionType.setVrmList, vrmList: updatedVmList });
             setIsLoadingVrmList(false);
         }});
-    }, []);
+    }, [configInitialized]);
 
-    const getCurrentVrm = () => {
+    const getCurrentVrm = useCallback(() => {
         return config('vrm_save_type') == 'local' ? loadedVrmList.find(vrm => vrm.getHash() == config('vrm_hash') ) : loadedVrmList.find(vrm => vrm.url == config('vrm_url') );
-    }
+    }, [loadedVrmList]);
+
+    const contextValue = useMemo(() => ({
+        getCurrentVrm,
+        vrmList: loadedVrmList,
+        vrmListAddFile,
+        isLoadingVrmList,
+        setIsLoadingVrmList,
+    }), [getCurrentVrm, loadedVrmList, vrmListAddFile, isLoadingVrmList]);
 
     return (
-        <VrmStoreContext.Provider value={{getCurrentVrm: getCurrentVrm, vrmList: loadedVrmList, vrmListAddFile, isLoadingVrmList, setIsLoadingVrmList}}>
+        <VrmStoreContext.Provider value={contextValue}>
             {children}
         </VrmStoreContext.Provider>
     );

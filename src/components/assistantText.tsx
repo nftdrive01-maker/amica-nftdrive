@@ -3,9 +3,9 @@ import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { IconButton } from "./iconButton";
 
-function renderWithLinks(text: string) {
+function renderWithLinks(line: string) {
   const linkRegex = /((?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?)/g;
-  const parts = text.split(linkRegex);
+  const parts = line.split(linkRegex);
 
   return parts.map((part, i) => {
     const trimmed = part.trim();
@@ -33,12 +33,45 @@ function renderWithLinks(text: string) {
   });
 }
 
+function renderMultilineWithLinks(text: string) {
+  const lines = text.split(/\r?\n/);
+  return lines.map((line, index) => (
+    <div key={index}>
+      {renderWithLinks(line)}
+    </div>
+  ));
+}
+
+function splitChronicleBlock(text: string): {
+  chipLabel: string | null;
+  chronicleContent: string | null;
+  plainMessage: string;
+} {
+  const match = text.match(/^\[\[CHRONICLE_TITLE:([^\]]+)\]\]\n([\s\S]*?)\n\[\[\/CHRONICLE\]\]\n*/);
+  if (!match) {
+    return {
+      chipLabel: null,
+      chronicleContent: null,
+      plainMessage: text,
+    };
+  }
+
+  return {
+    chipLabel: (match[1] || "CHRONICLE").trim(),
+    chronicleContent: (match[2] || "").trim(),
+    plainMessage: text.slice(match[0].length),
+  };
+}
+
+function stripEmotionTags(text: string): string {
+  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust)\]\s*/gi, "");
+}
+
 export const AssistantText = ({ message }: { message: string }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [unlimited, setUnlimited] = useState(false)
-
-  // Replace all of the emotion tag in message with ""
-  message = message.replace(/\[(.*?)\]/g, "");
+  const normalizedMessage = stripEmotionTags(message);
+  const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(normalizedMessage);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({
@@ -48,7 +81,7 @@ export const AssistantText = ({ message }: { message: string }) => {
   });
 
   return (
-    <div className="fixed bottom-0 left-0 mb-20 w-full">
+    <div className="fixed bottom-0 left-0 mb-28 w-full">
       <div className="mx-auto max-w-4xl w-full px-4 md:px-16">
         <div className="backdrop-blur-lg rounded-lg">
           <div className="bg-white/70 rounded-lg backdrop-blur-lg shadow-lg">
@@ -67,8 +100,18 @@ export const AssistantText = ({ message }: { message: string }) => {
               "px-8 py-4 overflow-y-auto",
               unlimited ? 'max-h-[calc(75vh)]' : 'max-h-32',
             )}>
-              <div className="min-h-8 max-h-full text-gray-700 typography-16 font-bold">
-                {renderWithLinks(message.replace(/\[([a-zA-Z]*?)\]/g, ""))}
+              <div className="min-h-8 max-h-full text-gray-700 typography-16 font-bold whitespace-pre-wrap break-words leading-relaxed">
+                {chipLabel && chronicleContent && (
+                  <div className="mb-3 rounded-md border border-cyan-300 bg-cyan-50 p-3">
+                    <div className="mb-2 inline-flex items-center rounded-full border border-cyan-400 bg-white px-2 py-0.5 text-xs font-bold text-cyan-700">
+                      {chipLabel}
+                    </div>
+                    <div className="whitespace-pre-wrap break-words text-gray-700">
+                      {renderMultilineWithLinks(chronicleContent)}
+                    </div>
+                  </div>
+                )}
+                {renderMultilineWithLinks(plainMessage)}
                 <div ref={scrollRef} />
               </div>
             </div>

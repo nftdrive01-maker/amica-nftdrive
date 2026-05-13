@@ -11,7 +11,7 @@ import { AlertContext } from "@/features/alert/alertContext";
 import { ChatContext } from "@/features/chat/chatContext";
 import { openaiWhisper  } from "@/features/openaiWhisper/openaiWhisper";
 import { whispercpp  } from "@/features/whispercpp/whispercpp";
-import { config, defaultConfig, updateConfig } from "@/utils/config";
+import { config, defaultConfig, updateConfig, updateConfigBatch } from "@/utils/config";
 import { WaveFile } from "wavefile";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { AudioControlsContext } from "@/features/moshi/components/audioControlsContext";
@@ -23,9 +23,15 @@ import { createWebSpeechTranscriber, isWebSpeechSupported, WebSpeechAudioLevel, 
 type DomainOption = {
   id: string;
   label: string;
+  chronicleAttached?: boolean;
   bgUrl?: string;
   characterName?: string;
+  vrmEnabled?: boolean;
   vrmUrl?: string;
+  imageAvatarIdleUrl?: string;
+  imageAvatarTalkUrl?: string;
+  imageAvatarTalkIntervalMs?: number;
+  ttsMuted?: boolean;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
 };
@@ -127,6 +133,7 @@ export default function MessageInput({
   const webSpeechMaxRmsRef = useRef(0);
   const webSpeechLastLevelLogAtRef = useRef(0);
   const [domainMenuOpen, setDomainMenuOpen] = useState(false);
+  const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('amica_selected_domain_id');
@@ -142,6 +149,10 @@ export default function MessageInput({
     vrmUrl: defaultConfig("vrm_url"),
     vrmHash: defaultConfig("vrm_hash"),
     vrmSaveType: defaultConfig("vrm_save_type"),
+    imageAvatarIdleUrl: defaultConfig('image_avatar_idle_url'),
+    imageAvatarTalkUrl: defaultConfig('image_avatar_talk_url'),
+    imageAvatarTalkIntervalMs: parseInt(defaultConfig('image_avatar_talk_interval_ms'), 10) || 180,
+    ttsMuted: config("tts_muted"),
     stylebertvits2ModelId: config("stylebertvits2_model_id"),
     stylebertvits2Style: config("stylebertvits2_style"),
   });
@@ -176,9 +187,14 @@ export default function MessageInput({
       {
         id: config("injection_default_domain"),
         label: config("injection_default_domain_label"),
+        chronicleAttached: false,
         bgUrl: '',
         characterName: '',
         vrmUrl: '',
+        imageAvatarIdleUrl: '',
+        imageAvatarTalkUrl: '',
+        imageAvatarTalkIntervalMs: 180,
+        ttsMuted: undefined,
         stylebertvits2ModelId: '',
         stylebertvits2Style: '',
       },
@@ -195,9 +211,16 @@ export default function MessageInput({
         .map((item: any) => ({
           id: String(item.id).trim(),
           label: String(item.label ?? item.name ?? item.id).trim(),
+          chronicleAttached: Boolean(item.chronicleAttached),
           bgUrl: String(item.bgUrl ?? '').trim(),
           characterName: String(item.characterName ?? '').trim(),
+          vrmEnabled: typeof item.vrmEnabled === 'boolean' ? item.vrmEnabled : true,
           vrmUrl: String(item.vrmUrl ?? '').trim(),
+          imageAvatarIdleUrl: String(item.imageAvatarIdleUrl ?? '').trim(),
+          imageAvatarTalkUrl: String(item.imageAvatarTalkUrl ?? '').trim(),
+          imageAvatarTalkIntervalMs:
+            typeof item.imageAvatarTalkIntervalMs === 'number' ? item.imageAvatarTalkIntervalMs : 180,
+          ttsMuted: typeof item.ttsMuted === 'boolean' ? item.ttsMuted : undefined,
           stylebertvits2ModelId: String(item.stylebertvits2ModelId ?? '').trim(),
           stylebertvits2Style: String(item.stylebertvits2Style ?? '').trim(),
         }))
@@ -212,6 +235,15 @@ export default function MessageInput({
   const selectedDomainLabel =
     domainOptions.find((domain: DomainOption) => domain.id === selectedDomain)?.label ||
     config("injection_default_domain_label");
+  const selectedDomainOption = domainOptions.find((domain: DomainOption) => domain.id === selectedDomain);
+  const selectedDomainHasChronicle = Boolean(selectedDomainOption?.chronicleAttached);
+  const [chronicleEnabledForInput, setChronicleEnabledForInput] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDomainHasChronicle) {
+      setChronicleEnabledForInput(false);
+    }
+  }, [selectedDomainHasChronicle]);
 
   const currentSTTBackend = config('stt_backend');
   const currentTTSBackend = config('tts_backend');
@@ -277,6 +309,7 @@ export default function MessageInput({
   const applyDomainOverrides = useCallback(async (domain: DomainOption | undefined) => {
     const baseline = initialDomainConfigRef.current;
     const previousVrmUrl = config('vrm_url');
+    const nextVrmEnabled = domain?.vrmEnabled ?? true;
     const nextName = domain?.characterName?.trim() || baseline.name;
     const normalizedBaselineBgUrl = toRuntimeAssetUrl(baseline.bgUrl || '');
     const normalizedBaselineVrmUrl = toRuntimeAssetUrl(baseline.vrmUrl || '');
@@ -286,8 +319,34 @@ export default function MessageInput({
     let resolvedVrmUrl = requestedVrmUrl;
     let resolvedVrmHash = domain?.vrmUrl?.trim() ? '' : baseline.vrmHash;
     let resolvedVrmSaveType = domain?.vrmUrl?.trim() ? 'web' : baseline.vrmSaveType;
+    const nextImageAvatarIdleUrl = toRuntimeAssetUrl(domain?.imageAvatarIdleUrl?.trim() || baseline.imageAvatarIdleUrl || '');
+    const nextImageAvatarTalkUrl = toRuntimeAssetUrl(domain?.imageAvatarTalkUrl?.trim() || baseline.imageAvatarTalkUrl || '');
+    const nextImageAvatarTalkIntervalMs =
+      typeof domain?.imageAvatarTalkIntervalMs === 'number' && domain.imageAvatarTalkIntervalMs > 0
+        ? domain.imageAvatarTalkIntervalMs
+        : baseline.imageAvatarTalkIntervalMs;
+    const nextTtsMuted =
+      typeof domain?.ttsMuted === 'boolean'
+        ? domain.ttsMuted
+        : baseline.ttsMuted === 'true';
     const nextModelId = domain?.stylebertvits2ModelId?.trim() || baseline.stylebertvits2ModelId;
     const nextStyle = domain?.stylebertvits2Style?.trim() || baseline.stylebertvits2Style;
+
+    const configEntries: Array<[string, string]> = [
+      ['name', nextName],
+      ['bg_url', resolvedBgUrl],
+      ['vrm_enabled', nextVrmEnabled ? 'true' : 'false'],
+      ['vrm_url', resolvedVrmUrl],
+      ['vrm_hash', resolvedVrmHash],
+      ['vrm_save_type', resolvedVrmSaveType],
+      ['image_avatar_idle_url', nextImageAvatarIdleUrl],
+      ['image_avatar_talk_url', nextImageAvatarTalkUrl],
+      ['image_avatar_talk_interval_ms', String(nextImageAvatarTalkIntervalMs)],
+      ['stylebertvits2_model_id', nextModelId],
+      ['stylebertvits2_style', nextStyle],
+    ];
+
+    configEntries.push(['tts_muted', nextTtsMuted ? 'true' : 'false']);
 
     if (typeof document !== 'undefined' && domain?.bgUrl?.trim()) {
       const bgOk = await checkImageAvailable(requestedBgUrl);
@@ -300,15 +359,7 @@ export default function MessageInput({
       }
     }
 
-    await Promise.all([
-      updateConfig('name', nextName),
-      updateConfig('bg_url', resolvedBgUrl),
-      updateConfig('vrm_url', resolvedVrmUrl),
-      updateConfig('vrm_hash', resolvedVrmHash),
-      updateConfig('vrm_save_type', resolvedVrmSaveType),
-      updateConfig('stylebertvits2_model_id', nextModelId),
-      updateConfig('stylebertvits2_style', nextStyle),
-    ]);
+    await updateConfigBatch(configEntries);
 
     if (typeof document !== 'undefined') {
       if (resolvedBgUrl) {
@@ -323,9 +374,11 @@ export default function MessageInput({
       }
     }
 
-    if (viewer.isReady && resolvedVrmUrl && previousVrmUrl !== resolvedVrmUrl) {
+    if (nextVrmEnabled && viewer.isReady && resolvedVrmUrl && previousVrmUrl !== resolvedVrmUrl) {
       try {
         await viewer.loadVrm(toRenderableUrl(resolvedVrmUrl), () => {});
+        // VrmViewer の lastLoadedUrlRef と同期して二重ロードを防ぐ
+        window.dispatchEvent(new CustomEvent('amica:vrm-externally-loaded', { detail: { url: toRenderableUrl(resolvedVrmUrl) } }));
       } catch (error) {
         console.error('Failed to switch VRM for selected domain:', error);
 
@@ -345,9 +398,10 @@ export default function MessageInput({
           `ドメイン「${domain?.label ?? domain?.id ?? 'unknown'}」のVRMを読み込めなかったため、デフォルトVRMへ戻しました。`
         );
 
-        if (viewer.isReady && fallbackVrmUrl && previousVrmUrl !== fallbackVrmUrl) {
+        if (nextVrmEnabled && viewer.isReady && fallbackVrmUrl && previousVrmUrl !== fallbackVrmUrl) {
           try {
             await viewer.loadVrm(toRenderableUrl(fallbackVrmUrl), () => {});
+            window.dispatchEvent(new CustomEvent('amica:vrm-externally-loaded', { detail: { url: toRenderableUrl(fallbackVrmUrl) } }));
           } catch (fallbackError) {
             console.error('Failed to load fallback VRM:', fallbackError);
           }
@@ -377,7 +431,12 @@ export default function MessageInput({
       domainId: selectedDomain,
       bgUrl: domain?.bgUrl || '',
       characterName: domain?.characterName || '',
+      vrmEnabled: domain?.vrmEnabled ?? true,
       vrmUrl: domain?.vrmUrl || '',
+      imageAvatarIdleUrl: domain?.imageAvatarIdleUrl || '',
+      imageAvatarTalkUrl: domain?.imageAvatarTalkUrl || '',
+      imageAvatarTalkIntervalMs: domain?.imageAvatarTalkIntervalMs ?? 180,
+      ttsMuted: domain?.ttsMuted,
       stylebertvits2ModelId: domain?.stylebertvits2ModelId || '',
       stylebertvits2Style: domain?.stylebertvits2Style || '',
     });
@@ -389,7 +448,7 @@ export default function MessageInput({
     appliedDomainConfigRef.current = signature;
 
     // viewer がまだ準備できていない場合は VRM URL を pending に積んでおく
-    if (domain.vrmUrl?.trim() && !viewer.isReady) {
+    if ((domain.vrmEnabled ?? true) && domain.vrmUrl?.trim() && !viewer.isReady) {
       pendingVrmUrlRef.current = domain.vrmUrl.trim();
     }
 
@@ -403,18 +462,19 @@ export default function MessageInput({
         return;
       }
       clearInterval(intervalId);
+      const pendingUrl = pendingVrmUrlRef.current;
       pendingVrmUrlRef.current = null;
-      // appliedDomainConfigRef をリセットして applyDomainOverrides を再実行させる
-      appliedDomainConfigRef.current = null;
+      // appliedDomainConfigRef をリセットせず、直接 VRM だけロードする
+      // (設定は既に applyDomainOverrides で書き込み済みのため)
       const domain = domainOptions.find((item) => item.id === selectedDomainRef.current);
-      if (domain) {
-        void applyDomainOverrides(domain);
+      if (domain && (domain.vrmEnabled ?? true) && pendingUrl) {
+        void viewer.loadVrm(toRenderableUrl(pendingUrl), () => {});
       }
     }, 500);
 
     return () => clearInterval(intervalId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyDomainOverrides, domainOptions, viewer]);
+  }, [viewer, domainOptions]);
 
   const refreshDomainOptions = useCallback(async (preferCurrent: boolean) => {
     const defaultDomainId = config("injection_default_domain");
@@ -438,15 +498,26 @@ export default function MessageInput({
       // localStorageに保存済みの選択を優先して復元
       const savedId = typeof window !== 'undefined' ? localStorage.getItem('amica_selected_domain_id') : null;
       const hasSaved = savedId && optionsFromApi.some((domain) => domain.id === savedId);
+
+      const applyFallbackSelection = (id: string) => {
+        setSelectedDomain(id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('amica_selected_domain_id', id);
+        }
+      };
+
       if (hasSaved) {
-        setSelectedDomain(savedId!);
+        applyFallbackSelection(savedId!);
       } else {
-        // 初回ロード時のみデフォルトに設定
+        // 保存済みも現在選択中も存在しない場合は default → 先頭の順で決定し、起動時の揺れを防ぐ
         const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
         if (hasDefault) {
-          setSelectedDomain(defaultDomainId);
+          applyFallbackSelection(defaultDomainId);
         } else {
-          setSelectedDomain(optionsFromApi[0].id);
+          const firstDomainId = optionsFromApi[0]?.id ?? '';
+          if (firstDomainId) {
+            applyFallbackSelection(firstDomainId);
+          }
         }
       }
     } catch {
@@ -745,7 +816,8 @@ export default function MessageInput({
   }, [whisperCppOutput]);
 
   function clickedSendButton() {
-    bot.receiveMessageFromUser(userMessage, false, selectedDomain);
+    const messageToSend = chronicleEnabledForInput ? `[[USE_CHRONICLE]] ${userMessage}` : userMessage;
+    bot.receiveMessageFromUser(messageToSend, false, selectedDomain);
     // only if we are using non-VAD mode should we focus on the input
     if (! vad.listening) {
       if (! hasOnScreenKeyboard()) {
@@ -760,11 +832,12 @@ export default function MessageInput({
       <div className="mx-auto max-w-4xl p-2 backdrop-blur-lg border-0 rounded-lg">
         <div className="mb-1 px-1 text-xs text-white/90">
           ナレッジ：{selectedDomainLabel}
+          {selectedDomainHasChronicle ? ' • CHRONICLE接続' : ' • CHRONICLE未接続'}
         </div>
         <div className="mb-1 px-1 text-[11px] text-white/80">
           STT: {currentSTTLabel} | TTS: {currentTTSLabel} | AI: {currentChatbotLabel} ({currentAIModel})
         </div>
-        <div className="grid grid-flow-col grid-cols-[min-content_min-content_1fr_min-content] gap-[8px]">
+        <div className="grid grid-flow-col grid-cols-[min-content_min-content_min-content_1fr_min-content] gap-[8px]">
           <div>
             <div className='flex flex-col justify-center items-center'>
               {config("chatbot_backend") === "moshi" ? (
@@ -796,10 +869,11 @@ export default function MessageInput({
           <div className="relative flex flex-col justify-center items-center">
             <button
               type="button"
-              className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center"
+              className="relative h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center"
               onClick={() => {
                 const next = !domainMenuOpen;
                 setDomainMenuOpen(next);
+                setFeatureMenuOpen(false);
                 if (next) {
                   void refreshDomainOptions(true);
                 }
@@ -810,6 +884,9 @@ export default function MessageInput({
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
               </svg>
+              {selectedDomainHasChronicle && (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#0f172a]" aria-label="Chronicle connected" />
+              )}
             </button>
 
             {domainMenuOpen && (
@@ -834,30 +911,82 @@ export default function MessageInput({
             )}
           </div>
 
-          <input
-            type="text"
-            ref={inputRef}
-            placeholder={config("chatbot_backend") === "moshi" ? "Disabled in moshi chatbot" : "Write message here..."}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                if (hasOnScreenKeyboard()) {
-                  inputRef.current?.blur();
+          <div className="relative flex flex-col justify-center items-center">
+            <button
+              type="button"
+              className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center text-lg leading-none"
+              onClick={() => {
+                const next = !featureMenuOpen;
+                setFeatureMenuOpen(next);
+                setDomainMenuOpen(false);
+              }}
+              title="追加アクション"
+              aria-label="追加アクション"
+            >
+              +
+            </button>
+
+            {featureMenuOpen && (
+              <div className="absolute bottom-10 left-0 z-30 min-w-[180px] rounded-md bg-white shadow-md ring-1 ring-gray-200">
+                <button
+                  type="button"
+                  disabled={!selectedDomainHasChronicle}
+                  className={`block w-full px-3 py-2 text-left text-sm ${selectedDomainHasChronicle ? 'hover:bg-gray-100 text-gray-900' : 'text-gray-400 cursor-not-allowed'}`}
+                  onClick={() => {
+                    if (!selectedDomainHasChronicle) {
+                      return;
+                    }
+                    setChronicleEnabledForInput(true);
+                    setFeatureMenuOpen(false);
+                  }}
+                  title={selectedDomainHasChronicle ? 'CHRONICLEを選択' : 'このドメインにはCHRONICLEが未接続です'}
+                >
+                  CHRONICLEを使用
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex w-full items-center gap-2 rounded-md bg-white px-2 py-1 shadow-sm ring-1 ring-inset ring-gray-300 focus-within:ring-1 focus-within:ring-inset focus-within:ring-gray-400">
+            {selectedDomainHasChronicle && chronicleEnabledForInput && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                  CHRONICLE
+                  <button
+                    type="button"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full text-emerald-800 hover:bg-emerald-200"
+                    onClick={() => setChronicleEnabledForInput(false)}
+                    title="CHRONICLEを解除"
+                    aria-label="CHRONICLEを解除"
+                  >
+                    ×
+                  </button>
+                </span>
+            )}
+
+            <input
+              type="text"
+              ref={inputRef}
+              placeholder={config("chatbot_backend") === "moshi" ? "Disabled in moshi chatbot" : "Write message here..."}
+              onChange={handleInputChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (hasOnScreenKeyboard()) {
+                    inputRef.current?.blur();
+                  }
+
+                  if (userMessage === "") {
+                    return false;
+                  }
+
+                  clickedSendButton();
                 }
-
-                if (userMessage === "") {
-                  return false;
-                }
-
-                clickedSendButton();
-              }
-            }}
-            disabled={config("chatbot_backend") === "moshi"}
-
-            className="disabled block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-1 focus:ring-inset focus:ring-gray-400 sm:text-sm sm:leading-6"
-            value={userMessage}
-            autoComplete="off"
-          />
+              }}
+              disabled={config("chatbot_backend") === "moshi"}
+              className="disabled block w-full border-0 bg-transparent py-0.5 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm sm:leading-6"
+              value={userMessage}
+              autoComplete="off"
+            />
+          </div>
 
           <div className='flex flex-col justify-center items-center'>
             <IconButton
