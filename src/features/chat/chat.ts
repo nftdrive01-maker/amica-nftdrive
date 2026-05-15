@@ -210,6 +210,7 @@ export class Chat {
   private currentUserMessage: string;
   private thoughtMessage: string;
   private pendingChronicleDecoratedBlock: string;
+  private speakingNow: boolean;
 
   private lastAwake: number;
 
@@ -234,6 +235,7 @@ export class Chat {
     this.currentUserMessage = "";
     this.thoughtMessage = "";
     this.pendingChronicleDecoratedBlock = "";
+    this.speakingNow = false;
 
     this.messageList = [];
     this.currentStreamIdx = 0;
@@ -422,12 +424,14 @@ export class Chat {
         }
 
         if (config("tts_muted") === "true") {
+          this.speakingNow = false;
           this.setChatSpeaking!(false);
           this.isAwake() ? this.updateAwake() : null;
           continue;
         }
 
         if (speak.audioBuffer) {
+          this.speakingNow = true;
           this.setChatSpeaking!(true);
           console.debug("speak start", {
             streamIdx: speak.streamIdx,
@@ -459,6 +463,7 @@ export class Chat {
             streamIdx: speak.streamIdx,
             text: speak.screenplay.text,
           });
+          this.speakingNow = false;
           this.setChatSpeaking!(false);
           this.isAwake() ? this.updateAwake() : null;
         }
@@ -480,6 +485,31 @@ export class Chat {
     }
     this.thoughtMessage += thought;
     this.setThoughtMessage!(this.thoughtMessage);
+  }
+
+  public isSpeaking(): boolean {
+    return this.speakingNow;
+  }
+
+  public speakAssistantReaction(text: string, domainId?: string): void {
+    const reaction = (text || '').trim();
+    if (!reaction) {
+      return;
+    }
+
+    this.bubbleMessage('assistant', reaction);
+
+    const screenplays = textsToScreenplay([reaction]);
+    if (screenplays.length === 0) {
+      return;
+    }
+
+    this.ttsJobs.enqueue({
+      screenplay: screenplays[0],
+      streamIdx: this.currentStreamIdx,
+      domainId,
+      bubbleToChat: false,
+    });
   }
 
   public bubbleMessage(role: Role, text: string) {

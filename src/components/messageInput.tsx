@@ -34,7 +34,52 @@ type DomainOption = {
   ttsMuted?: boolean;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
+  gazeWakeEnabled?: boolean;
+  gazeHoldMs?: number;
+  gazeReleaseMs?: number;
+  gazeCooldownMs?: number;
+  gazeGreetings?: string[];
+  gazeDebugUiEnabled?: boolean;
 };
+
+type GazeDebugState = {
+  status: string;
+  holdProgress: number;
+  cooldownRemainingMs: number;
+  faceAreaRatio: number;
+  centered: boolean;
+  errorName: string;
+  errorMessage: string;
+};
+
+type GazeCalibration = {
+  centerXDiff: number;
+  centerYDiff: number;
+  yawAsymmetry: number;
+  rollRadians: number;
+  faceAreaRatio: number;
+  capturedAt: number;
+};
+
+type GazeMetrics = {
+  hasFace: boolean;
+  centerXDiff: number;
+  centerYDiff: number;
+  yawAsymmetry: number;
+  rollRadians: number;
+  faceAreaRatio: number;
+};
+
+const DEFAULT_GAZE_HOLD_MS = 1500;
+const DEFAULT_GAZE_RELEASE_MS = 300;
+const DEFAULT_GAZE_COOLDOWN_MS = 10000;
+const GAZE_CALIBRATION_STORAGE_KEY = 'amica_gaze_calibration_v1';
+const DEFAULT_GAZE_GREETINGS = [
+  '何か御用がありますか？',
+  'お待ちしていました。どうしましたか？',
+  'こんにちは。必要なことがあれば教えてください。',
+  '目が合いましたね。今日は何をお手伝いしましょうか？',
+];
 
 const sttBackendLabels: Record<string, string> = {
   none: 'None',
@@ -134,6 +179,17 @@ export default function MessageInput({
   const webSpeechLastLevelLogAtRef = useRef(0);
   const [domainMenuOpen, setDomainMenuOpen] = useState(false);
   const [featureMenuOpen, setFeatureMenuOpen] = useState(false);
+  const [gazeWakeEnabled, setGazeWakeEnabled] = useState(false);
+  const [hasGazeCalibration, setHasGazeCalibration] = useState(false);
+  const [gazeDebug, setGazeDebug] = useState<GazeDebugState>({
+    status: 'idle',
+    holdProgress: 0,
+    cooldownRemainingMs: 0,
+    faceAreaRatio: 0,
+    centered: false,
+    errorName: '',
+    errorMessage: '',
+  });
   const [selectedDomain, setSelectedDomain] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('amica_selected_domain_id');
@@ -142,6 +198,8 @@ export default function MessageInput({
     return config("injection_default_domain");
   });
   const lastVadErrorMessageRef = useRef<string | null>(null);
+  const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
+  const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
     name: config("name"),
     bgUrl: defaultConfig("bg_url"),
@@ -197,6 +255,12 @@ export default function MessageInput({
         ttsMuted: undefined,
         stylebertvits2ModelId: '',
         stylebertvits2Style: '',
+        gazeWakeEnabled: true,
+        gazeHoldMs: DEFAULT_GAZE_HOLD_MS,
+        gazeReleaseMs: DEFAULT_GAZE_RELEASE_MS,
+        gazeCooldownMs: DEFAULT_GAZE_COOLDOWN_MS,
+        gazeGreetings: [...DEFAULT_GAZE_GREETINGS],
+        gazeDebugUiEnabled: false,
       },
     ];
 
@@ -219,10 +283,33 @@ export default function MessageInput({
           imageAvatarIdleUrl: String(item.imageAvatarIdleUrl ?? '').trim(),
           imageAvatarTalkUrl: String(item.imageAvatarTalkUrl ?? '').trim(),
           imageAvatarTalkIntervalMs:
-            typeof item.imageAvatarTalkIntervalMs === 'number' ? item.imageAvatarTalkIntervalMs : 180,
+            typeof item.imageAvatarTalkIntervalMs === 'number' && item.imageAvatarTalkIntervalMs > 0
+              ? item.imageAvatarTalkIntervalMs
+              : 180,
           ttsMuted: typeof item.ttsMuted === 'boolean' ? item.ttsMuted : undefined,
           stylebertvits2ModelId: String(item.stylebertvits2ModelId ?? '').trim(),
           stylebertvits2Style: String(item.stylebertvits2Style ?? '').trim(),
+          gazeWakeEnabled: typeof item.gazeWakeEnabled === 'boolean' ? item.gazeWakeEnabled : true,
+          gazeHoldMs:
+            typeof item.gazeHoldMs === 'number' && item.gazeHoldMs > 0
+              ? item.gazeHoldMs
+              : DEFAULT_GAZE_HOLD_MS,
+          gazeReleaseMs:
+            typeof item.gazeReleaseMs === 'number' && item.gazeReleaseMs > 0
+              ? item.gazeReleaseMs
+              : DEFAULT_GAZE_RELEASE_MS,
+          gazeCooldownMs:
+            typeof item.gazeCooldownMs === 'number' && item.gazeCooldownMs > 0
+              ? item.gazeCooldownMs
+              : DEFAULT_GAZE_COOLDOWN_MS,
+          gazeGreetings: Array.isArray(item.gazeGreetings)
+            ? item.gazeGreetings
+                .filter((phrase: unknown) => typeof phrase === 'string')
+                .map((phrase: string) => phrase.trim())
+                .filter(Boolean)
+            : [...DEFAULT_GAZE_GREETINGS],
+          gazeDebugUiEnabled:
+            typeof item.gazeDebugUiEnabled === 'boolean' ? item.gazeDebugUiEnabled : false,
         }))
         .filter((item: DomainOption) => item.id.length > 0 && item.label.length > 0);
 
@@ -236,6 +323,15 @@ export default function MessageInput({
     domainOptions.find((domain: DomainOption) => domain.id === selectedDomain)?.label ||
     config("injection_default_domain_label");
   const selectedDomainOption = domainOptions.find((domain: DomainOption) => domain.id === selectedDomain);
+  const selectedDomainGazeEnabled = selectedDomainOption?.gazeWakeEnabled ?? true;
+  const selectedDomainGazeDebugUiEnabled = selectedDomainOption?.gazeDebugUiEnabled ?? false;
+  const selectedDomainGazeHoldMs = selectedDomainOption?.gazeHoldMs ?? DEFAULT_GAZE_HOLD_MS;
+  const selectedDomainGazeReleaseMs = selectedDomainOption?.gazeReleaseMs ?? DEFAULT_GAZE_RELEASE_MS;
+  const selectedDomainGazeCooldownMs = selectedDomainOption?.gazeCooldownMs ?? DEFAULT_GAZE_COOLDOWN_MS;
+  const selectedDomainGazeGreetings =
+    selectedDomainOption?.gazeGreetings && selectedDomainOption.gazeGreetings.length > 0
+      ? selectedDomainOption.gazeGreetings
+      : DEFAULT_GAZE_GREETINGS;
   const selectedDomainHasChronicle = Boolean(selectedDomainOption?.chronicleAttached);
   const [chronicleEnabledForInput, setChronicleEnabledForInput] = useState(false);
 
@@ -244,6 +340,112 @@ export default function MessageInput({
       setChronicleEnabledForInput(false);
     }
   }, [selectedDomainHasChronicle]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const key = `amica_gaze_wake_enabled:${selectedDomain}`;
+    const saved = localStorage.getItem(key);
+    if (saved === null) {
+      setGazeWakeEnabled(selectedDomainGazeEnabled);
+      return;
+    }
+
+    setGazeWakeEnabled(saved === 'true');
+  }, [selectedDomain, selectedDomainGazeEnabled]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const key = `amica_gaze_wake_enabled:${selectedDomain}`;
+    localStorage.setItem(key, gazeWakeEnabled ? 'true' : 'false');
+  }, [selectedDomain, gazeWakeEnabled]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const saved = localStorage.getItem(GAZE_CALIBRATION_STORAGE_KEY);
+      if (!saved) {
+        gazeCalibrationRef.current = null;
+        setHasGazeCalibration(false);
+        return;
+      }
+
+      const parsed = JSON.parse(saved) as Partial<GazeCalibration>;
+      if (
+        typeof parsed.centerXDiff !== 'number' ||
+        typeof parsed.centerYDiff !== 'number' ||
+        typeof parsed.yawAsymmetry !== 'number' ||
+        typeof parsed.rollRadians !== 'number' ||
+        typeof parsed.faceAreaRatio !== 'number'
+      ) {
+        gazeCalibrationRef.current = null;
+        setHasGazeCalibration(false);
+        return;
+      }
+
+      gazeCalibrationRef.current = {
+        centerXDiff: parsed.centerXDiff,
+        centerYDiff: parsed.centerYDiff,
+        yawAsymmetry: parsed.yawAsymmetry,
+        rollRadians: parsed.rollRadians,
+        faceAreaRatio: parsed.faceAreaRatio,
+        capturedAt: typeof parsed.capturedAt === 'number' ? parsed.capturedAt : 0,
+      };
+      setHasGazeCalibration(true);
+    } catch {
+      gazeCalibrationRef.current = null;
+      setHasGazeCalibration(false);
+    }
+  }, []);
+
+  const calibrateGaze = useCallback(() => {
+    const metrics = latestGazeMetricsRef.current;
+    if (!metrics?.hasFace) {
+      alert.warning('キャリブレーションできません', '顔が安定して映っている状態で、正面を向いてから再実行してください。');
+      return;
+    }
+
+    const calibration: GazeCalibration = {
+      centerXDiff: metrics.centerXDiff,
+      centerYDiff: metrics.centerYDiff,
+      yawAsymmetry: metrics.yawAsymmetry,
+      rollRadians: metrics.rollRadians,
+      faceAreaRatio: metrics.faceAreaRatio,
+      capturedAt: Date.now(),
+    };
+
+    gazeCalibrationRef.current = calibration;
+    setHasGazeCalibration(true);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(GAZE_CALIBRATION_STORAGE_KEY, JSON.stringify(calibration));
+    }
+
+    alert.success('視線基準を保存しました', 'この端末の正面姿勢を基準に更新しました。必要ならいつでも再実行できます。');
+  }, [alert]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const onCalibrateRequest = () => {
+      calibrateGaze();
+    };
+
+    window.addEventListener('amica:gaze-calibrate', onCalibrateRequest);
+    return () => {
+      window.removeEventListener('amica:gaze-calibrate', onCalibrateRequest);
+    };
+  }, [calibrateGaze]);
 
   const currentSTTBackend = config('stt_backend');
   const currentTTSBackend = config('tts_backend');
@@ -684,6 +886,12 @@ export default function MessageInput({
   }
 
   const isWebSpeechBackend = config('stt_backend') === 'web_speech';
+  const gazeSupportWarnedRef = useRef(false);
+  const gazePermissionWarnedRef = useRef(false);
+  const micListeningRef = useRef(false);
+  const chatProcessingRef = useRef(isChatProcessing);
+  const micStarterRef = useRef<() => void>(() => {});
+  const micStopperRef = useRef<() => void>(() => {});
 
   function toggleWebSpeech() {
     console.log('[toggleWebSpeech] START - webSpeechListening:', webSpeechListening);
@@ -758,6 +966,40 @@ export default function MessageInput({
   }
 
   useEffect(() => {
+    micListeningRef.current = isWebSpeechBackend ? webSpeechListening : vad.listening;
+  }, [isWebSpeechBackend, webSpeechListening, vad.listening]);
+
+  useEffect(() => {
+    chatProcessingRef.current = isChatProcessing;
+  }, [isChatProcessing]);
+
+  useEffect(() => {
+    micStarterRef.current = () => {
+      if (isWebSpeechBackend) {
+        if (!webSpeechListening) {
+          toggleWebSpeech();
+        }
+        return;
+      }
+      if (!vad.listening) {
+        vad.toggle();
+      }
+    };
+    micStopperRef.current = () => {
+      if (isWebSpeechBackend) {
+        if (webSpeechListening) {
+          webSpeechControllerRef.current?.stop();
+          setWebSpeechListening(false);
+        }
+        return;
+      }
+      if (vad.listening) {
+        vad.toggle();
+      }
+    };
+  }, [isWebSpeechBackend, webSpeechListening, vad, toggleWebSpeech]);
+
+  useEffect(() => {
     return () => {
       webSpeechControllerRef.current?.abort();
       webSpeechControllerRef.current = null;
@@ -790,6 +1032,355 @@ export default function MessageInput({
       setWebSpeechListening(false);
     }
   }, [isWebSpeechBackend, webSpeechListening]);
+
+  useEffect(() => {
+    if (!gazeWakeEnabled || !selectedDomainGazeEnabled || config("chatbot_backend") === "moshi") {
+      setGazeDebug((prev) => ({ ...prev, status: 'off', holdProgress: 0, cooldownRemainingMs: 0, centered: false }));
+      return;
+    }
+
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return;
+    }
+
+    let stopped = false;
+    let stream: MediaStream | null = null;
+    let timerId: number | null = null;
+    let mpDetector: {
+      detectForVideo: (videoEl: HTMLVideoElement, timestampMs: number) => {
+        faceLandmarks?: Array<Array<{ x: number; y: number; z: number }>>;
+      };
+      close: () => void;
+    } | null = null;
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+
+    // hold% を積算方式で管理 (0 〜 selectedDomainGazeHoldMs ms)
+    let holdAccumulatedMs = 0;
+    let lastTickAt: number | null = null;
+    let lostSince: number | null = null;
+    let waitingForRelease = false;
+    let lastTriggeredAt = 0;
+    let lastDebugUiUpdateAt = 0;
+    const tick = () => {
+      if (stopped || video.readyState < 2 || !mpDetector) {
+        return;
+      }
+
+      try {
+        const result = mpDetector.detectForVideo(video, Date.now());
+        const landmarks = result.faceLandmarks?.[0] ?? null;
+        const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+        const now = Date.now();
+        let bestBox: { originX: number; originY: number; width: number; height: number } | null = null;
+        if (landmarks && landmarks.length > 0 && video.videoWidth > 0 && video.videoHeight > 0) {
+          let minX = 1;
+          let minY = 1;
+          let maxX = 0;
+          let maxY = 0;
+          for (const lm of landmarks) {
+            minX = Math.min(minX, lm.x);
+            minY = Math.min(minY, lm.y);
+            maxX = Math.max(maxX, lm.x);
+            maxY = Math.max(maxY, lm.y);
+          }
+          bestBox = {
+            originX: minX * video.videoWidth,
+            originY: minY * video.videoHeight,
+            width: Math.max(0, (maxX - minX) * video.videoWidth),
+            height: Math.max(0, (maxY - minY) * video.videoHeight),
+          };
+        }
+
+        let lookingForward = false;
+        let gazeScore = 0; // 0.0〜1.0: 正面向き強度
+        let faceAreaRatio = 0;
+        if (bestBox && landmarks && video.videoWidth > 0 && video.videoHeight > 0) {
+          const centerX = bestBox.originX + bestBox.width / 2;
+          const centerY = bestBox.originY + bestBox.height / 2;
+          const centerXDiff = Math.abs(centerX - video.videoWidth / 2) / video.videoWidth;
+          const centerYDiff = Math.abs(centerY - video.videoHeight / 2) / video.videoHeight;
+          faceAreaRatio = (bestBox.width * bestBox.height) / (video.videoWidth * video.videoHeight);
+
+          const xScore = clamp01(1 - centerXDiff / 0.32);
+          const yScore = clamp01(1 - centerYDiff / 0.38);
+          const sizeScore = clamp01(faceAreaRatio / 0.08);
+
+          // FaceLandmarker の主要点: 33/133(左目), 263/362(右目), 1(鼻)
+          const leftEyeOuter = landmarks[33];
+          const leftEyeInner = landmarks[133];
+          const rightEyeOuter = landmarks[263];
+          const rightEyeInner = landmarks[362];
+          const noseTip = landmarks[1];
+
+          let orientationScore = 0;
+          let yawAsymmetry = 1;
+          let rollRadians = Math.PI / 2;
+          if (leftEyeOuter && leftEyeInner && rightEyeOuter && rightEyeInner && noseTip) {
+            const leftEyeX = (leftEyeOuter.x + leftEyeInner.x) / 2;
+            const leftEyeY = (leftEyeOuter.y + leftEyeInner.y) / 2;
+            const rightEyeX = (rightEyeOuter.x + rightEyeInner.x) / 2;
+            const rightEyeY = (rightEyeOuter.y + rightEyeInner.y) / 2;
+            const interEyeDistance = Math.hypot(rightEyeX - leftEyeX, rightEyeY - leftEyeY);
+
+            if (interEyeDistance > 1e-4) {
+              rollRadians = Math.abs(Math.atan2(rightEyeY - leftEyeY, rightEyeX - leftEyeX));
+              const rollScore = clamp01(1 - rollRadians / 0.35);
+
+              const noseLeftDistance = Math.hypot(noseTip.x - leftEyeX, noseTip.y - leftEyeY);
+              const noseRightDistance = Math.hypot(noseTip.x - rightEyeX, noseTip.y - rightEyeY);
+              yawAsymmetry =
+                Math.abs(noseLeftDistance - noseRightDistance) /
+                Math.max(1e-4, noseLeftDistance + noseRightDistance);
+              const yawScore = clamp01(1 - yawAsymmetry / 0.18);
+
+              orientationScore = 0.65 * yawScore + 0.35 * rollScore;
+            }
+          }
+
+          latestGazeMetricsRef.current = {
+            hasFace: true,
+            centerXDiff,
+            centerYDiff,
+            yawAsymmetry,
+            rollRadians,
+            faceAreaRatio,
+          };
+
+          const calibration = gazeCalibrationRef.current;
+          const centerScore = calibration
+            ? clamp01(1 - Math.abs(centerXDiff - calibration.centerXDiff) / 0.1) *
+              clamp01(1 - Math.abs(centerYDiff - calibration.centerYDiff) / 0.12)
+            : xScore * yScore;
+          const calibratedOrientationScore = calibration
+            ? 0.7 * clamp01(1 - Math.abs(yawAsymmetry - calibration.yawAsymmetry) / 0.08) +
+              0.3 * clamp01(1 - Math.abs(rollRadians - calibration.rollRadians) / 0.18)
+            : orientationScore;
+          const calibratedSizeScore = calibration
+            ? clamp01(1 - Math.abs(faceAreaRatio - calibration.faceAreaRatio) / Math.max(0.02, calibration.faceAreaRatio * 0.8))
+            : sizeScore;
+
+          // 厳しめ設定。キャリブレーションがある場合は現在の端末配置を優先する。
+          gazeScore = 0.4 * centerScore + 0.15 * calibratedSizeScore + 0.45 * calibratedOrientationScore;
+          lookingForward =
+            gazeScore >= (calibration ? 0.66 : 0.59) &&
+            centerXDiff <= (calibration ? calibration.centerXDiff + 0.14 : 0.32) &&
+            centerYDiff <= (calibration ? calibration.centerYDiff + 0.16 : 0.36) &&
+            faceAreaRatio >= Math.max(0.015, calibration ? calibration.faceAreaRatio * 0.5 : 0.018);
+        } else {
+          latestGazeMetricsRef.current = {
+            hasFace: false,
+            centerXDiff: 1,
+            centerYDiff: 1,
+            yawAsymmetry: 1,
+            rollRadians: Math.PI / 2,
+            faceAreaRatio: 0,
+          };
+        }
+
+        // tickInterval を計算して holdAccumulatedMs を増減
+        const tickInterval = lastTickAt !== null ? now - lastTickAt : 250;
+        lastTickAt = now;
+
+        if (lookingForward) {
+          lostSince = null;
+          // スコアに比例して蓄積 (score=1 なら tickInterval 分加算, 0.3 なら 30% だけ加算)
+          holdAccumulatedMs = Math.min(
+            selectedDomainGazeHoldMs,
+            holdAccumulatedMs + tickInterval * Math.max(0.3, gazeScore)
+          );
+        } else {
+          // 視線が外れたら 2× 速で減少
+          holdAccumulatedMs = Math.max(0, holdAccumulatedMs - tickInterval * 2);
+          if (lostSince === null) {
+            lostSince = now;
+          }
+        }
+
+        const holdProgress = holdAccumulatedMs / selectedDomainGazeHoldMs;
+
+        if (now - lastDebugUiUpdateAt >= 200) {
+          const cooldownRemainingMs = Math.max(0, selectedDomainGazeCooldownMs - (now - lastTriggeredAt));
+          const status = waitingForRelease
+            ? 'waiting-release'
+            : lookingForward
+              ? 'tracking'
+              : bestBox
+                ? 'face-detected'
+                : 'no-face';
+
+          setGazeDebug({
+            status,
+            holdProgress,
+            cooldownRemainingMs,
+            faceAreaRatio,
+            centered: lookingForward,
+            errorName: '',
+            errorMessage: '',
+          });
+          lastDebugUiUpdateAt = now;
+        }
+
+        // 視線が外れた場合の処理
+        if (!lookingForward) {
+          // waitingForRelease 中に視線が外れたらマイクを停止
+          if (waitingForRelease && lostSince !== null && now - lostSince >= selectedDomainGazeReleaseMs) {
+            micStopperRef.current();
+            waitingForRelease = false;
+          } else if (!waitingForRelease && lostSince !== null && now - lostSince >= selectedDomainGazeReleaseMs) {
+            // hold リセット
+            holdAccumulatedMs = 0;
+            lostSince = null;
+          }
+          return;
+        }
+
+        // 以下 lookingForward === true
+        lostSince = null;
+
+        if (waitingForRelease) {
+          return;
+        }
+
+        if (holdProgress < 1) {
+          return;
+        }
+
+        if (now - lastTriggeredAt < selectedDomainGazeCooldownMs) {
+          return;
+        }
+
+        if (chatProcessingRef.current || micListeningRef.current || bot.isSpeaking()) {
+          return;
+        }
+
+        waitingForRelease = true;
+        lastTriggeredAt = now;
+        holdAccumulatedMs = selectedDomainGazeHoldMs;
+        setGazeDebug((prev) => ({ ...prev, status: 'triggered', holdProgress: 1 }));
+
+        amicaLife.pause();
+        bot.updateAwake();
+        micStarterRef.current();
+
+        const randomIndex = Math.floor(Math.random() * selectedDomainGazeGreetings.length);
+        const greeting = selectedDomainGazeGreetings[randomIndex] || DEFAULT_GAZE_GREETINGS[0];
+        bot.speakAssistantReaction(greeting, selectedDomain);
+      } catch (error) {
+        const errorName = (error as any)?.name ?? 'UnknownError';
+        const errorMessage = (error as any)?.message ?? '';
+        console.warn('[gaze] mediapipe detect error', errorName, errorMessage);
+        setGazeDebug((prev) => ({
+          ...prev,
+          status: 'detector-error',
+          holdProgress: 0,
+          centered: false,
+          faceAreaRatio: 0,
+          errorName,
+          errorMessage,
+        }));
+      }
+    };
+
+    const start = async () => {
+      try {
+        setGazeDebug((prev) => ({ ...prev, status: 'loading', holdProgress: 0, centered: false, errorName: '', errorMessage: '' }));
+
+        const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        if (stopped) return;
+
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
+        );
+        if (stopped) return;
+
+        mpDetector = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          minFaceDetectionConfidence: 0.5,
+          minFacePresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+        if (stopped) { mpDetector.close(); mpDetector = null; return; }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+
+        if (stopped) {
+          stream.getTracks().forEach((track) => track.stop());
+          mpDetector.close();
+          mpDetector = null;
+          return;
+        }
+
+        video.srcObject = stream;
+        await video.play().catch(() => undefined);
+        timerId = window.setInterval(tick, 250);
+      } catch (err: any) {
+        if (stopped) return;
+        const name: string = err?.name ?? '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          if (!gazePermissionWarnedRef.current) {
+            gazePermissionWarnedRef.current = true;
+            alert.warning('視線起動を開始できませんでした', 'カメラ権限が必要なため、視線起動をオフにしました。');
+          }
+          setGazeDebug((prev) => ({ ...prev, status: 'camera-denied', holdProgress: 0, centered: false }));
+          setGazeWakeEnabled(false);
+        } else {
+          if (!gazeSupportWarnedRef.current) {
+            gazeSupportWarnedRef.current = true;
+            alert.warning('視線起動の初期化に失敗しました', err?.message ?? String(err));
+          }
+          setGazeDebug((prev) => ({
+            ...prev,
+            status: 'detector-error',
+            holdProgress: 0,
+            centered: false,
+            errorName: err?.name ?? '',
+            errorMessage: err?.message ?? '',
+          }));
+        }
+      }
+    };
+
+    void start();
+
+    return () => {
+      stopped = true;
+      if (timerId !== null) {
+        window.clearInterval(timerId);
+      }
+      mpDetector?.close();
+      mpDetector = null;
+      const currentStream = video.srcObject as MediaStream | null;
+      currentStream?.getTracks().forEach((track) => track.stop());
+      stream?.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+      setGazeDebug((prev) => ({ ...prev, status: 'stopped', holdProgress: 0, centered: false }));
+    };
+  }, [
+    alert,
+    amicaLife,
+    bot,
+    gazeWakeEnabled,
+    selectedDomain,
+    selectedDomainGazeCooldownMs,
+    selectedDomainGazeEnabled,
+    selectedDomainGazeGreetings,
+    selectedDomainGazeHoldMs,
+    selectedDomainGazeReleaseMs,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]);
 
   // for whisper_browser
   useEffect(() => {
@@ -837,7 +1428,36 @@ export default function MessageInput({
         <div className="mb-1 px-1 text-[11px] text-white/80">
           STT: {currentSTTLabel} | TTS: {currentTTSLabel} | AI: {currentChatbotLabel} ({currentAIModel})
         </div>
-        <div className="grid grid-flow-col grid-cols-[min-content_min-content_min-content_1fr_min-content] gap-[8px]">
+        {selectedDomainGazeDebugUiEnabled && (
+          <div className="mb-1 px-1 text-[10px] text-white/70">
+            視線: {gazeWakeEnabled ? 'ON' : 'OFF'} / {gazeDebug.status}
+            {' '}| hold: {Math.round(gazeDebug.holdProgress * 100)}%
+            {' '}| cooldown: {Math.max(0, Math.round(gazeDebug.cooldownRemainingMs))}ms
+            {' '}| centered: {gazeDebug.centered ? 'yes' : 'no'}
+            {' '}| face: {gazeDebug.faceAreaRatio.toFixed(3)}
+            {' '}| calib: {hasGazeCalibration ? 'yes' : 'no'}
+            {(gazeDebug.status === 'detector-error' || gazeDebug.status === 'unsupported') && (
+              <>
+                {' '}| err: {gazeDebug.errorName || '-'}
+                {gazeDebug.errorMessage ? ` (${gazeDebug.errorMessage})` : ''}
+              </>
+            )}
+          </div>
+        )}
+        <div className="grid grid-flow-col grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content] gap-[8px]">
+          <div className="flex flex-col justify-center items-center">
+            <button
+              type="button"
+              className={`h-8 w-8 rounded-lg text-white active:scale-[0.98] flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 ${gazeWakeEnabled ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-secondary hover:bg-secondary-hover active:bg-secondary-press'}`}
+              onClick={() => setGazeWakeEnabled((prev) => !prev)}
+              disabled={!selectedDomainGazeEnabled}
+              title={!selectedDomainGazeEnabled ? 'このドメインでは視線起動が無効です' : gazeWakeEnabled ? '視線起動: ON' : '視線起動: OFF'}
+              aria-label={gazeWakeEnabled ? '視線起動をオフ' : '視線起動をオン'}
+            >
+              👀
+            </button>
+          </div>
+
           <div>
             <div className='flex flex-col justify-center items-center'>
               {config("chatbot_backend") === "moshi" ? (

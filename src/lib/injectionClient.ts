@@ -213,6 +213,12 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
   ttsMuted?: boolean;
+  gazeWakeEnabled?: boolean;
+  gazeHoldMs?: number;
+  gazeReleaseMs?: number;
+  gazeCooldownMs?: number;
+  gazeGreetings?: string[];
+  gazeDebugUiEnabled?: boolean;
 }>> {
   try {
     const enabled =
@@ -295,6 +301,23 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
                 ? domain.stylebertvits2Style.trim()
                 : '',
             ttsMuted: typeof domain.ttsMuted === 'boolean' ? domain.ttsMuted : undefined,
+            gazeWakeEnabled:
+              typeof domain.gazeWakeEnabled === 'boolean' ? domain.gazeWakeEnabled : undefined,
+            gazeHoldMs:
+              typeof domain.gazeHoldMs === 'number' ? domain.gazeHoldMs : undefined,
+            gazeReleaseMs:
+              typeof domain.gazeReleaseMs === 'number' ? domain.gazeReleaseMs : undefined,
+            gazeCooldownMs:
+              typeof domain.gazeCooldownMs === 'number' ? domain.gazeCooldownMs : undefined,
+            gazeGreetings:
+              Array.isArray(domain.gazeGreetings)
+                ? domain.gazeGreetings
+                    .filter((phrase: unknown) => typeof phrase === 'string')
+                    .map((phrase: string) => phrase.trim())
+                    .filter(Boolean)
+                : undefined,
+            gazeDebugUiEnabled:
+              typeof domain.gazeDebugUiEnabled === 'boolean' ? domain.gazeDebugUiEnabled : undefined,
           }))
           .filter((domain: { id: string; label: string }) => domain.id.length > 0 && domain.label.length > 0);
 
@@ -312,6 +335,12 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
           stylebertvits2ModelId?: string;
           stylebertvits2Style?: string;
           ttsMuted?: boolean;
+          gazeWakeEnabled?: boolean;
+          gazeHoldMs?: number;
+          gazeReleaseMs?: number;
+          gazeCooldownMs?: number;
+          gazeGreetings?: string[];
+          gazeDebugUiEnabled?: boolean;
         }>();
         for (const domain of options) {
           if (!unique.has(domain.id)) {

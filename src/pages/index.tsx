@@ -467,6 +467,20 @@ export default function Home() {
           {showMainMenu ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
         </button>
 
+        <button
+          type="button"
+          className="mt-1 flex h-8 w-10 items-center justify-center rounded-md bg-slate-900/60 text-white backdrop-blur-md hover:bg-slate-800/80"
+          title="視線キャリブレーション"
+          aria-label="視線キャリブレーション"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('amica:gaze-calibrate'));
+            }
+          }}
+        >
+          👀
+        </button>
+
         {showMainMenu && (
         <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
           <div className='flex flex-col justify-center items-center p-1 space-y-3'>
