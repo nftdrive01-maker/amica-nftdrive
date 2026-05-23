@@ -43,6 +43,7 @@ export function ChatGPTSettingsPage({
                 updateConfig("openai_apikey", event.target.value);
                 setSettingsUpdated(true);
               }}
+              placeholder="Set a new server-side key"
             />
           </FormRow>
         </li>

@@ -4,8 +4,97 @@
  */
 
 import { InjectionInterceptRequest, InjectionInterceptResponse } from '@/types/injection';
+import type { ChatHistoryEntry } from '@/features/chatHistory/chatHistoryModel';
 import { config } from '@/utils/config';
 import { getCachedInjection, cacheInjection } from '@/lib/injectionCache';
+import { getDomainAccessSession } from '@/lib/domainAccessSession';
+
+export type PublicDomainOption = {
+  id: string;
+  label: string;
+  chronicleAttached?: boolean;
+  accessControlEnabled?: boolean;
+  mcpServerIds?: string[];
+  knowledgeIds?: string[];
+  bgUrl?: string;
+  themeColor?: string;
+  characterName?: string;
+  vrmEnabled?: boolean;
+  vrmUrl?: string;
+  imageAvatarIdleUrl?: string;
+  imageAvatarTalkUrl?: string;
+  imageAvatarTalkIntervalMs?: number;
+  stylebertvits2ModelId?: string;
+  stylebertvits2Style?: string;
+  ttsMuted?: boolean;
+  gazeWakeEnabled?: boolean;
+  gazeHoldMs?: number;
+  gazeReleaseMs?: number;
+  gazeCooldownMs?: number;
+  gazeGreetings?: string[];
+  gazeDebugUiEnabled?: boolean;
+};
+
+function buildDomainAccessHeaders(domainId?: string): Record<string, string> {
+  const normalizedDomainId = String(domainId || '').trim();
+  if (!normalizedDomainId) {
+    return {};
+  }
+
+  const session = getDomainAccessSession(normalizedDomainId);
+  if (!session?.accessToken) {
+    return {};
+  }
+
+  return {
+    'x-domain-access-token': session.accessToken,
+  };
+}
+
+export function getDomainAccessHeaders(domainId?: string): Record<string, string> {
+  return buildDomainAccessHeaders(domainId);
+}
+
+export async function loginDomainAccess(domainId: string, username: string, password: string): Promise<{ ok: boolean; accessToken?: string; username?: string; error?: string; code?: string }> {
+  try {
+    const url = typeof document !== 'undefined' ? config('injection_tool_url') : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+    const endpoint = buildEndpoint(url, '/api/public/domain-access/login/');
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ domainId, username, password }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: payload?.error || 'ドメイン認証に失敗しました',
+        code: payload?.code,
+      };
+    }
+
+    return {
+      ok: true,
+      accessToken: typeof payload?.accessToken === 'string' ? payload.accessToken : '',
+      username: typeof payload?.username === 'string' ? payload.username : username,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'ドメイン認証に失敗しました',
+    };
+  }
+}
+
+function generateRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 /**
  * base が相対パス（BFF プロキシ）の場合も正しくエンドポイントを生成する。
@@ -47,6 +136,58 @@ function buildEnvFallback(domainId: string): InjectionInterceptResponse {
   };
 }
 
+export async function syncServerChatHistory(entries: ChatHistoryEntry[]): Promise<void> {
+  try {
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return;
+    }
+
+    const enabled =
+      typeof document !== 'undefined'
+        ? config('injection_tool_enabled').toLowerCase() === 'true'
+        : process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED !== 'false';
+
+    const url =
+      typeof document !== 'undefined'
+        ? config('injection_tool_url')
+        : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+
+    if (!enabled || !url) {
+      return;
+    }
+
+    const endpoint = buildEndpoint(url, '/api/public/chat-history/');
+    const groupedEntries = new Map<string, ChatHistoryEntry[]>();
+    for (const entry of entries) {
+      const domainId = String(entry.domainId || '').trim();
+      if (!domainId) {
+        continue;
+      }
+
+      const current = groupedEntries.get(domainId) || [];
+      current.push(entry);
+      groupedEntries.set(domainId, current);
+    }
+
+    for (const [domainId, grouped] of groupedEntries.entries()) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildDomainAccessHeaders(domainId),
+        },
+        body: JSON.stringify({ entries: grouped }),
+      });
+
+      if (!response.ok) {
+        console.warn('Chat history sync failed:', response.status, response.statusText);
+      }
+    }
+  } catch (error) {
+    console.warn('Chat history sync failed:', error);
+  }
+}
+
 /**
  * Injection Tool に問い合わせて動的コンテキストを取得
  * fail-open: 失敗時は空オブジェクト（またはキャッシュ）を返し、Amica側で素通し処理する
@@ -55,7 +196,8 @@ export async function fetchInjectedContext(
   userText: string,
   domainId?: string,
   sessionId?: string,
-  messageHistory?: Array<{ role: string; content: string }>
+  messageHistory?: Array<{ role: string; content: string }>,
+  options?: { requestId?: string; attachedPackIds?: string[] }
 ): Promise<InjectionInterceptResponse> {
   try {
     const targetDomainId =
@@ -91,9 +233,11 @@ export async function fetchInjectedContext(
     const endpoint = buildEndpoint(url, '/api/intercept/');
 
     const request: InjectionInterceptRequest = {
+      requestId: options?.requestId || generateRequestId(),
       userText,
       domainId: targetDomainId,
       sessionId,
+      attachedPackIds: options?.attachedPackIds,
       messageHistory: messageHistory as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
       timestamp: Date.now(),
     };
@@ -105,7 +249,7 @@ export async function fetchInjectedContext(
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildDomainAccessHeaders(targetDomainId) },
         body: JSON.stringify(request),
         signal: controller.signal,
       });
@@ -129,7 +273,8 @@ export async function fetchInjectedContext(
         if (cached) {
           return cached;
         }
-        return buildEnvFallback(targetDomainId);
+        // サーバーエラーを明示
+        return { error: 'server_error' };
       }
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
@@ -143,7 +288,8 @@ export async function fetchInjectedContext(
       if (cached) {
         return cached;
       }
-      return buildEnvFallback(targetDomainId);
+      // サーバーエラーを明示
+      return { error: 'server_error' };
     }
   } catch (err) {
     console.warn('Error in fetchInjectedContext:', err);
@@ -152,7 +298,8 @@ export async function fetchInjectedContext(
     if (cached) {
       return cached;
     }
-    return buildEnvFallback(domain);
+    // サーバーエラーを明示
+    return { error: 'server_error' };
   }
 }
 
@@ -199,27 +346,132 @@ export async function checkInjectionToolHealth(): Promise<boolean> {
   }
 }
 
-export async function fetchPublicDomainOptions(): Promise<Array<{
+function buildPublicSessionsEndpoint(base: string, action?: string): string {
+  const endpoint = buildEndpoint(base, '/api/public/sessions');
+  if (!action) return endpoint;
+  const connector = endpoint.includes('?') ? '&' : '?';
+  return `${endpoint}${connector}action=${encodeURIComponent(action)}`;
+}
+
+export async function getServerAttachedPacks(sessionId: string, domainId?: string): Promise<string[]> {
+  if (!sessionId) return [];
+
+  try {
+    const url = typeof document !== 'undefined' ? config('injection_tool_url') : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+    const endpoint = buildPublicSessionsEndpoint(url, 'attached');
+    const requestUrl = `${endpoint}&sessionId=${encodeURIComponent(sessionId)}`;
+    const response = await fetch(requestUrl, { method: 'GET', cache: 'no-store', headers: buildDomainAccessHeaders(domainId) });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data?.attachedPackIds)
+      ? data.attachedPackIds.filter((id: unknown): id is string => typeof id === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export type AttachedPackItem = {
   id: string;
-  label: string;
-  chronicleAttached?: boolean;
-  bgUrl?: string;
-  characterName?: string;
-  vrmEnabled?: boolean;
-  vrmUrl?: string;
-  imageAvatarIdleUrl?: string;
-  imageAvatarTalkUrl?: string;
-  imageAvatarTalkIntervalMs?: number;
-  stylebertvits2ModelId?: string;
-  stylebertvits2Style?: string;
-  ttsMuted?: boolean;
-  gazeWakeEnabled?: boolean;
-  gazeHoldMs?: number;
-  gazeReleaseMs?: number;
-  gazeCooldownMs?: number;
-  gazeGreetings?: string[];
-  gazeDebugUiEnabled?: boolean;
-}>> {
+  name: string;
+};
+
+export type ServerAttachedPackDetails = {
+  mcpServers: AttachedPackItem[];
+  knowledges: AttachedPackItem[];
+  unknownPackIds: string[];
+  isReachable: boolean;
+  errorCode?: string;
+};
+
+export async function getServerAttachedPackDetails(sessionId: string, domainId?: string): Promise<ServerAttachedPackDetails> {
+  if (!sessionId && !domainId) {
+    return { mcpServers: [], knowledges: [], unknownPackIds: [], isReachable: true };
+  }
+
+  try {
+    const url = typeof document !== 'undefined' ? config('injection_tool_url') : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+    const endpoint = buildPublicSessionsEndpoint(url, 'attached');
+    const requestUrl = `${endpoint}&sessionId=${encodeURIComponent(sessionId || '')}&domainId=${encodeURIComponent(domainId || '')}`;
+    const response = await fetch(requestUrl, { method: 'GET', cache: 'no-store', headers: buildDomainAccessHeaders(domainId) });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      return {
+        mcpServers: [],
+        knowledges: [],
+        unknownPackIds: [],
+        isReachable: false,
+        errorCode: typeof payload?.code === 'string' ? payload.code : undefined,
+      };
+    }
+
+    const data = await response.json();
+    const details = data?.attachedDetails;
+    if (!details || typeof details !== 'object') {
+      return { mcpServers: [], knowledges: [], unknownPackIds: [], isReachable: true };
+    }
+
+    const normalizeItems = (items: unknown): AttachedPackItem[] =>
+      Array.isArray(items)
+        ? items
+            .filter((item): item is { id: unknown; name: unknown } => typeof item === 'object' && item !== null)
+            .map((item) => ({
+              id: typeof item.id === 'string' ? item.id : '',
+              name: typeof item.name === 'string' ? item.name : '',
+            }))
+            .filter((item) => item.id && item.name)
+        : [];
+
+    const unknownPackIds = Array.isArray(details.unknownPackIds)
+      ? details.unknownPackIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : [];
+
+    return {
+      mcpServers: normalizeItems(details.mcpServers),
+      knowledges: normalizeItems(details.knowledges),
+      unknownPackIds,
+      isReachable: true,
+    };
+  } catch {
+    return { mcpServers: [], knowledges: [], unknownPackIds: [], isReachable: false };
+  }
+}
+
+export async function attachPackToSession(sessionId: string, packId: string): Promise<boolean> {
+  if (!sessionId || !packId) return false;
+
+  try {
+    const url = typeof document !== 'undefined' ? config('injection_tool_url') : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+    const endpoint = buildPublicSessionsEndpoint(url, 'attach');
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...buildDomainAccessHeaders(packId) },
+      body: JSON.stringify({ sessionId, packId }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function detachPackFromSession(sessionId: string, packId: string): Promise<boolean> {
+  if (!sessionId || !packId) return false;
+
+  try {
+    const url = typeof document !== 'undefined' ? config('injection_tool_url') : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+    const endpoint = buildPublicSessionsEndpoint(url, 'detach');
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...buildDomainAccessHeaders(packId) },
+      body: JSON.stringify({ sessionId, packId }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> {
   try {
     const enabled =
       typeof document !== 'undefined'
@@ -282,7 +534,15 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
             id: String(domain.id).trim(),
             label: String(domain.name || domain.label).trim(),
             chronicleAttached: Boolean(domain.chronicleAttached),
+            accessControlEnabled: Boolean(domain.accessControlEnabled),
+            mcpServerIds: Array.isArray(domain.mcpServerIds)
+              ? domain.mcpServerIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+              : [],
+            knowledgeIds: Array.isArray(domain.knowledgeIds)
+              ? domain.knowledgeIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+              : [],
             bgUrl: typeof domain.bgUrl === 'string' ? domain.bgUrl.trim() : '',
+            themeColor: typeof domain.themeColor === 'string' ? domain.themeColor.trim() : '',
             characterName: typeof domain.characterName === 'string' ? domain.characterName.trim() : '',
             vrmEnabled: typeof domain.vrmEnabled === 'boolean' ? domain.vrmEnabled : true,
             vrmUrl: typeof domain.vrmUrl === 'string' ? domain.vrmUrl.trim() : '',
@@ -325,7 +585,9 @@ export async function fetchPublicDomainOptions(): Promise<Array<{
           id: string;
           label: string;
           chronicleAttached?: boolean;
+          accessControlEnabled?: boolean;
           bgUrl?: string;
+          themeColor?: string;
           characterName?: string;
           vrmEnabled?: boolean;
           vrmUrl?: string;

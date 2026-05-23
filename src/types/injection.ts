@@ -7,6 +7,9 @@
  * Amicaがinjection-toolに送信するリクエスト
  */
 export interface InjectionInterceptRequest {
+  /** リクエストID（監査ログ相関用） */
+  requestId?: string;
+
   /** ユーザーが入力したテキスト */
   userText: string;
 
@@ -15,6 +18,9 @@ export interface InjectionInterceptRequest {
 
   /** ドメイン識別子（複数知識ソースの切替に使用） */
   domainId?: string;
+
+  /** クライアント申告のattach情報（サーバー側では信用しない） */
+  attachedPackIds?: string[];
 
   /** メッセージ履歴（コンテキスト含む） */
   messageHistory?: Array<{
@@ -36,6 +42,36 @@ export interface InjectionInterceptResponse {
   /** ユーザーの入力テキストに追加するコンテキスト */
   injectedUserContext?: string;
 
+  /** DB検索結果の表示用ペイロード（system promptには生データを混ぜない） */
+  dbResult?: {
+    /** タイトル表示用ラベル */
+    title?: string;
+
+    /** データソース名 */
+    sourceName?: string;
+
+    /** ツール名 */
+    toolName?: string;
+
+    /** AIに見せる短い要約 */
+    summary?: string;
+
+    /** 検索条件として使った入力文 */
+    queryText?: string;
+
+    /** 並び順の簡易ラベル */
+    sortLabel?: string;
+
+    /** 総件数 */
+    totalCount?: number;
+
+    /** プレビュー列 */
+    previewColumns?: string[];
+
+    /** プレビュー行 */
+    previewRows?: Array<Record<string, string | number | boolean | null>>;
+  };
+
   /** CHRONICLEの応答（表示用。system promptには混ぜない） */
   chronicle?: {
     /** タイトルチップ表示用ラベル */
@@ -50,6 +86,12 @@ export interface InjectionInterceptResponse {
 
   /** メタデータ（アセット、キャッシュTTL等） */
   metadata?: {
+    /** リクエストID（監査ログ相関用） */
+    requestId?: string;
+
+    /** セッションID */
+    sessionId?: string;
+
     /** 参照したドメインID */
     domainId?: string;
 
@@ -73,6 +115,12 @@ export interface InjectionInterceptResponse {
 
     /** MCP実行時のエラー */
     mcpError?: string;
+
+    /** MCP実行時のエラーコード */
+    mcpErrorCode?: string;
+
+    /** サーバー側で解決されたアタッチ済みPack */
+    attachedPackIds?: string[];
 
     /** CHRONICLEを実行したか */
     chronicleUsed?: boolean;

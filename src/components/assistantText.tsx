@@ -1,36 +1,133 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { clsx } from "clsx";
 import { config } from "@/utils/config";
-import { IconButton } from "./iconButton";
+import { normalizeThemeColor } from "@/utils/domainTheme";
+import { ChatDbResult } from "@/features/chat/messages";
+import { DbResultPanel } from "./dbResultPanel";
+
+function sanitizeUrl(url: string): string {
+  const strict = url.match(/^https?:\/\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/);
+  if (strict) {
+    return strict[0];
+  }
+  return url.replace(/[\]\[\"'.,!?;:]+$/g, '').replace(/\)+$/g, '');
+}
+
+function toHref(urlOrHost: string): string {
+  const base = /^https?:\/\//i.test(urlOrHost) ? urlOrHost : `https://${urlOrHost}`;
+  if (/^https:\/\/accounts\.google\.com\/(oauth2\/auth|o\/oauth2\/auth|oauth2\/v2\/auth|o\/oauth2\/v2\/auth)/i.test(base)) {
+    try {
+      const url = new URL(
+        base.replace(
+          /^https:\/\/accounts\.google\.com\/(oauth2\/auth|o\/oauth2\/auth|oauth2\/v2\/auth)/i,
+          'https://accounts.google.com/o/oauth2/v2/auth'
+        )
+      );
+      const redirectUri = url.searchParams.get('redirect_uri') || '';
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(?::(?:80|801))?\/oauth2callback$/i.test(redirectUri)) {
+        url.searchParams.set('redirect_uri', 'http://localhost:8001/oauth2callback');
+      }
+      return url.toString();
+    } catch {
+      return base;
+    }
+  }
+  return base;
+}
+
+function extractHttpUrl(text: string): string | null {
+  const compact = text
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\s+/g, '');
+  const match = compact.match(/https?:\/\/.+/i);
+  if (!match) {
+    return null;
+  }
+  return sanitizeUrl(match[0]);
+}
+
+function normalizeBrokenGoogleOAuthText(input: string): string {
+  const normalizedOAuth = input.replace(
+    /https:\/\/accounts\.google\s*\.com\/[\s\S]*?(?=$|\n)/gi,
+    (segment) => segment.replace(/\s+/g, '')
+  );
+
+  return normalizedOAuth.replace(
+    /https?:\/\/[A-Za-z0-9.-]+\s+\.[A-Za-z]{2,}(?:[^\s]*)?/gi,
+    (segment) => segment.replace(/\s+/g, '')
+  );
+}
 
 function renderWithLinks(line: string) {
-  const linkRegex = /((?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?)/g;
-  const parts = line.split(linkRegex);
+  const normalizedLine = normalizeBrokenGoogleOAuthText(line);
+  const nodes: Array<string | JSX.Element> = [];
+  const pattern = /\[([^\]]+)\]\s*\(([^)]+)\)|<((?:https?:\/\/|www\.)[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+)>|((?:https?:\/\/|www\.)[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+)/gi;
 
-  return parts.map((part, i) => {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      return part;
+  let cursor = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(normalizedLine)) !== null) {
+    const start = match.index;
+    const end = pattern.lastIndex;
+
+    if (start > cursor) {
+      nodes.push(normalizedLine.slice(cursor, start));
     }
 
-    const isUrlLike = /^(?:https?:\/\/)?(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?:\/[\w\-./?%&=+#~:]*)?$/.test(trimmed);
-    if (!isUrlLike) {
-      return part;
+    const markdownLabel = match[1];
+    const markdownPayload = match[2];
+    const angleWrappedUrl = match[3];
+    const bareUrl = match[4];
+    const rawUrl = markdownPayload
+      ? extractHttpUrl(markdownPayload)
+      : sanitizeUrl(angleWrappedUrl || bareUrl || '');
+    if (!rawUrl) {
+      nodes.push(match[0]);
+      cursor = end;
+      continue;
     }
+    const normalizedUrl = rawUrl;
+    const href = toHref(normalizedUrl);
 
-    const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    return (
+    nodes.push(
       <a
-        key={i}
+        key={`link-${key++}`}
         href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="underline decoration-pink-500 hover:text-pink-700"
       >
-        {part}
+        {markdownLabel || normalizedUrl}
       </a>
     );
-  });
+
+    cursor = end;
+  }
+
+  if (cursor < normalizedLine.length) {
+    nodes.push(normalizedLine.slice(cursor));
+  }
+
+  if (nodes.length === 1 && typeof nodes[0] === 'string') {
+    const recovered = extractHttpUrl(normalizedLine);
+    if (recovered && /accounts\.google\.com/i.test(recovered)) {
+      const href = toHref(recovered);
+      return [
+        <a
+          key="link-recovered"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-pink-500 hover:text-pink-700"
+        >
+          {href}
+        </a>,
+      ];
+    }
+  }
+
+  return nodes;
 }
 
 function renderMultilineWithLinks(text: string) {
@@ -40,6 +137,33 @@ function renderMultilineWithLinks(text: string) {
       {renderWithLinks(line)}
     </div>
   ));
+}
+
+function splitDbResultBlock(text: string): {
+  dbResult: ChatDbResult | null;
+  plainMessage: string;
+} {
+  const match = text.match(/\[\[DB_RESULT\]\]\n([\s\S]*?)\n\[\[\/DB_RESULT\]\]\n*/);
+  if (!match) {
+    return {
+      dbResult: null,
+      plainMessage: text,
+    };
+  }
+
+  try {
+    const matchedBlock = match[0] || "";
+    return {
+      dbResult: JSON.parse(match[1] || '{}') as ChatDbResult,
+      plainMessage: text.replace(matchedBlock, '').trimStart(),
+    };
+  } catch {
+    const matchedBlock = match[0] || "";
+    return {
+      dbResult: null,
+      plainMessage: text.replace(matchedBlock, '').trimStart(),
+    };
+  }
 }
 
 function splitChronicleBlock(text: string): {
@@ -64,14 +188,16 @@ function splitChronicleBlock(text: string): {
 }
 
 function stripEmotionTags(text: string): string {
-  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust)\]\s*/gi, "");
+  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, "");
 }
 
-export const AssistantText = ({ message }: { message: string }) => {
+export const AssistantText = ({ message, dbResult: dbResultProp }: { message: string; dbResult?: ChatDbResult }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [unlimited, setUnlimited] = useState(false)
+  const accentColor = normalizeThemeColor(config('theme_color'));
   const normalizedMessage = stripEmotionTags(message);
-  const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(normalizedMessage);
+  const { dbResult: dbResultFromText, plainMessage: afterDbMessage } = splitDbResultBlock(normalizedMessage);
+  const dbResult = dbResultProp || dbResultFromText;
+  const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(afterDbMessage);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({
@@ -82,31 +208,24 @@ export const AssistantText = ({ message }: { message: string }) => {
 
   return (
     <div className="fixed bottom-0 left-0 mb-28 w-full">
-      <div className="mx-auto max-w-4xl w-full px-4 md:px-16">
-        <div className="backdrop-blur-lg rounded-lg">
-          <div className="bg-white/70 rounded-lg backdrop-blur-lg shadow-lg">
-            <div className="px-8 pr-1 py-3 bg-rose/90 rounded-t-lg text-white font-bold tracking-wider">
-              <span className="p-4 bg-pink-600/80 rounded-lg rounded-tl-none rounded-tr-none shadow-sm">
-                {config('name').toUpperCase()}
+      <div className={clsx("mx-auto w-full px-4 md:px-10", dbResult ? "max-w-5xl" : "max-w-4xl")}>
+        <div className="relative overflow-hidden rounded-[28px] shadow-[0_22px_64px_rgba(15,23,42,0.2)]">
+          <div className="pointer-events-none absolute inset-y-0 left-0 right-0 bg-slate-950/22 backdrop-blur-[3px]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.015)_7%,rgba(15,23,42,0.2)_16%,rgba(15,23,42,0.34)_28%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.34)_72%,rgba(15,23,42,0.2)_84%,rgba(255,255,255,0.015)_93%,rgba(255,255,255,0.04)_100%)]" />
+          <div className="relative z-10 px-6 py-5 md:px-8">
+            <div className="flex items-center gap-2 pb-1 text-white font-bold tracking-wider">
+              <span className="inline-flex items-center text-[24px] font-bold leading-none text-pink-400 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[24px]" style={accentColor ? { color: accentColor } : undefined}>
+                {`${config('name')}:`}
               </span>
-              <IconButton
-                iconName="24/FrameSize"
-                className="bg-transparent hover:bg-transparent active:bg-transparent disabled:bg-transparent float-right"
-                isProcessing={false}
-                onClick={() => setUnlimited(!unlimited)}
-              />
             </div>
-            <div className={clsx(
-              "px-8 py-4 overflow-y-auto",
-              unlimited ? 'max-h-[calc(75vh)]' : 'max-h-32',
-            )}>
-              <div className="min-h-8 max-h-full text-gray-700 typography-16 font-bold whitespace-pre-wrap break-words leading-relaxed">
+            <div className="overflow-y-auto pb-3 pt-1 max-h-[calc(75vh)]">
+              <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-[18px] font-semibold leading-[1.5] text-white/95 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[25px]">
                 {chipLabel && chronicleContent && (
-                  <div className="mb-3 rounded-md border border-cyan-300 bg-cyan-50 p-3">
-                    <div className="mb-2 inline-flex items-center rounded-full border border-cyan-400 bg-white px-2 py-0.5 text-xs font-bold text-cyan-700">
+                  <div className="mb-3 bg-slate-950/12 px-3 py-2 backdrop-blur-[2px]">
+                    <div className="mb-2 inline-flex items-center text-[13px] font-bold tracking-[0.18em] text-cyan-200">
                       {chipLabel}
                     </div>
-                    <div className="whitespace-pre-wrap break-words text-gray-700">
+                    <div className="whitespace-pre-wrap break-words text-[17px] font-medium leading-[1.55] text-white/90 sm:text-[22px]">
                       {renderMultilineWithLinks(chronicleContent)}
                     </div>
                   </div>
@@ -115,6 +234,11 @@ export const AssistantText = ({ message }: { message: string }) => {
                 <div ref={scrollRef} />
               </div>
             </div>
+            {dbResult && (
+              <div className="mt-4 border-t border-white/10 px-1 pt-4">
+                <DbResultPanel dbResult={dbResult} />
+              </div>
+            )}
           </div>
         </div>
       </div>

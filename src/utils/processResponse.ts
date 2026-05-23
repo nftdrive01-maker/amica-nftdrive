@@ -35,6 +35,13 @@ function isIncompleteUrlFragment(sentence: string): boolean {
   // Wait until the model has produced a complete URL with a host and at least one dot.
   if (/^(?:https?:\/\/|www\.)/i.test(withoutBullet)) {
     const compact = withoutBullet.replace(/\s+/g, "");
+
+    // OAuth URLs can arrive as split chunks like "https://accounts.google" then ".com/oauth2/...".
+    // Keep buffering until ".google.com/..." is complete so the UI can render one clickable URL.
+    if (/^https?:\/\/accounts\.google(?:$|[/?#])/i.test(compact) && !/^https?:\/\/accounts\.google\.com\//i.test(compact)) {
+      return true;
+    }
+
     if (!/^(?:https?:\/\/|www\.)[A-Za-z0-9\-_.]+\.[A-Za-z]{2,}(?:\/.*)?$/i.test(compact)) {
       return true;
     }

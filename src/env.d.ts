@@ -7,6 +7,7 @@ declare namespace NodeJS {
 
     // StyleBertVits2 Configuration
     NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL?: string;
+    NEXT_PUBLIC_SHOW_CHAT_MODE?: string;
 
 
     // Existing environment variables (preserving for type safety)

@@ -2,6 +2,15 @@ import { handleConfig, serverConfig } from "@/features/externalAPI/externalAPI";
 
 export const CONFIG_UPDATED_EVENT = "chatvrm:config-updated";
 
+const secretConfigKeys = new Set([
+  "openai_apikey",
+  "vision_openai_apikey",
+]);
+
+export function isSecretConfigKey(key: string): boolean {
+  return secretConfigKeys.has(key);
+}
+
 export const defaults = {
   // --- AllTalk TTS (ローカル実行可能な高品質TTS) 設定 ---
   localXTTS_url: process.env.NEXT_PUBLIC_LOCALXTTS_URL ?? 'http://127.0.0.1:7851', // AllTalkサーバーのURL
@@ -28,10 +37,11 @@ export const defaults = {
   show_introduction: process.env.NEXT_PUBLIC_SHOW_INTRODUCTION ?? 'false',          // 導入ガイドを表示するか
   show_arbius_introduction: process.env.NEXT_PUBLIC_SHOW_ARBIUS_INTRODUCTION ?? 'false', // Arbius関連のガイド表示
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true', // PWA(ホーム画面追加)の案内
+  show_chat_mode: process.env.NEXT_PUBLIC_SHOW_CHAT_MODE ?? 'true',                 // チャットモードの初期表示
   bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',                                // 背景色
-  bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '/bg/bg-room2.jpg',                    // 背景画像のパス
-  // vrm_url: process.env.NEXT_PUBLIC_VRM_HASH ?? '/vrm/AvatarSample_A.vrm', 
-  vrm_url: process.env.NEXT_PUBLIC_VRM_HASH ?? '/vrm/mirai-yukata.vrm',          // キャラクター(VRM)のパス
+  bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '',                                    // 背景画像のパス
+  theme_color: process.env.NEXT_PUBLIC_THEME_COLOR ?? '',                          // ドメインテーマ色
+  vrm_url: process.env.NEXT_PUBLIC_VRM_URL ?? process.env.NEXT_PUBLIC_VRM_HASH ?? '',                                // キャラクター(VRM)のパス
   vrm_hash: '1',                                                                    // VRMファイルのハッシュ値
   vrm_save_type: 'web',                                                            // モデルデータの保存方法
   vrm_enabled: 'true',                                                             // VRMアバター表示を有効にするか
@@ -46,9 +56,9 @@ export const defaults = {
   // --- チャットバックエンド (LLM) 設定 ---
   chatbot_backend: process.env.NEXT_PUBLIC_CHATBOT_BACKEND ?? 'ollama',            // 使用するAIエンジン
   arbius_llm_model_id: process.env.NEXT_PUBLIC_ARBIUS_LLM_MODEL_ID ?? 'default',   // Arbius用モデルID
-  openai_apikey: process.env.NEXT_PUBLIC_OPENAI_APIKEY ?? 'default',               // OpenAIのAPIキー
-  openai_url: process.env.NEXT_PUBLIC_OPENAI_URL ?? 'https://i-love-amica.com',     // APIのベースURL
-  openai_model: process.env.NEXT_PUBLIC_OPENAI_MODEL ?? 'mlabonne/NeuralDaredevil-8B-abliterated', // 使用モデル
+  openai_apikey: '',                                                               // OpenAIのAPIキー
+  openai_url: process.env.NEXT_PUBLIC_OPENAI_URL ?? 'https://api.openai.com',      // APIのベースURL
+  openai_model: process.env.NEXT_PUBLIC_OPENAI_MODEL ?? 'gpt-4o-mini',             // 使用モデル
 
   // --- 各種ローカルLLM設定 ---
   llamacpp_url: process.env.NEXT_PUBLIC_LLAMACPP_URL ?? 'http://127.0.0.1:8080',   // Llama.cppのURL
@@ -73,7 +83,7 @@ export const defaults = {
   // --- 画像認識 (Vision) 設定 ---
   vision_backend: process.env.NEXT_PUBLIC_VISION_BACKEND ?? 'vision_openai',       // 画像解析エンジン
   vision_system_prompt: process.env.NEXT_PUBLIC_VISION_SYSTEM_PROMPT ?? `Look at the image as you would if you are a human, be concise, witty and charming.`, // 画像解析時のAIへの指示
-  vision_openai_apikey: process.env.NEXT_PUBLIC_VISION_OPENAI_APIKEY ?? 'default',
+  vision_openai_apikey: '',
   vision_openai_url: process.env.NEXT_PUBLIC_VISION_OPENAI_URL ?? 'https://api-01.heyamica.com',
   vision_openai_model: process.env.NEXT_PUBLIC_VISION_OPENAI_URL ?? 'gpt-4-vision-preview',
   vision_llamacpp_url: process.env.NEXT_PUBLIC_VISION_LLAMACPP_URL ?? 'http://127.0.0.1:8081',
@@ -135,7 +145,7 @@ export const defaults = {
   // --- 動的知識注入設定（injection-tool） ---
   injection_tool_enabled: process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED ?? 'true',   // 動的知識注入を有効にするか
   injection_tool_url: process.env.NEXT_PUBLIC_INJECTION_TOOL_URL ?? '/api/injection', // 注入ツールのエンドポイント
-  injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '8000',    // タイムアウト（ミリ秒）
+  injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '65000',    // タイムアウト（ミリ秒）
   injection_default_domain: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN ?? 'default', // デフォルトドメインID
   injection_default_domain_label: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN_LABEL ?? 'デフォルト', // デフォルトドメイン表示名
   injection_domain_options: process.env.NEXT_PUBLIC_INJECTION_DOMAIN_OPTIONS ?? '[{"id":"default","label":"デフォルト"}]',
@@ -181,6 +191,10 @@ if (typeof window !== "undefined") {
 }
 
 export function config(key: string): string {
+  if (typeof window !== "undefined" && isSecretConfigKey(key)) {
+    return "";
+  }
+
   if (typeof localStorage !== "undefined" && localStorage.hasOwnProperty(prefixed(key))) {
     const value = (<any>localStorage).getItem(prefixed(key))!;
     return normalizeConfigValue(key, value);
@@ -206,7 +220,11 @@ export async function updateConfig(key: string, value: string) {
 
     // Update localStorage if available
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(localKey, normalizedValue);
+      if (isSecretConfigKey(key)) {
+        localStorage.removeItem(localKey);
+      } else {
+        localStorage.setItem(localKey, normalizedValue);
+      }
     }
 
     // Sync update to server config
@@ -237,7 +255,11 @@ export async function updateConfigBatch(entries: Array<[string, string]>) {
       const localKey = prefixed(key);
 
       if (typeof localStorage !== "undefined") {
-        localStorage.setItem(localKey, normalizedValue);
+        if (isSecretConfigKey(key)) {
+          localStorage.removeItem(localKey);
+        } else {
+          localStorage.setItem(localKey, normalizedValue);
+        }
       }
 
       await handleConfig("update", { key, value: normalizedValue });

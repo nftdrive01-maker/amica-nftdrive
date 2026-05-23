@@ -19,6 +19,7 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState("");
   const [loadingError, setLoadingError] = useState(false);
+  const [vrmUrl, setVrmUrl] = useState(config("vrm_url").trim());
 
   // キャンバスが viewer にアタッチされたことを追跡するフラグ
   const [canvasReady, setCanvasReady] = useState(false);
@@ -68,6 +69,7 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
 
       setVrmEnabled(config("vrm_enabled") === 'true');
       setIsVrmLocal("local" == config("vrm_save_type"));
+      setVrmUrl(config("vrm_url").trim());
     };
 
     window.addEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated);
@@ -134,7 +136,10 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
   useEffect(() => {
     if (!canvasReady) return;
 
-    if (!vrmEnabled) {
+    if (!vrmEnabled || !vrmUrl) {
+      viewer.unloadVRM();
+      lastLoadedUrlRef.current = null;
+      setLoadingError(false);
       setIsLoading(false);
       return;
     }
@@ -143,7 +148,8 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
       // getCurrentVrm を ref 経由で参照し、deps への追加を避ける
       const currentVrm = getCurrentVrmRef.current();
       if (!currentVrm) {
-        setIsLoading(true);
+        setIsLoading(false);
+        setLoadingError(false);
         if (isTauri()) invoke("close_splashscreen");
         return;
       }
@@ -178,18 +184,18 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
     }
   // getCurrentVrm は ref 経由で参照するため deps に含めない
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasReady, vrmEnabled, isVrmLocal, isLoadingVrmList, viewer]);
+  }, [canvasReady, vrmEnabled, vrmUrl, isVrmLocal, isLoadingVrmList, viewer]);
 
   return (
     <div
       className={clsx(
-        "z-1 fixed left-0 top-0 h-full w-full",
-        chatMode ? "left-[65%] top-[50%]" : "left-0 top-0",
+        "fixed top-0 h-full w-full",
+        chatMode ? "left-0 pointer-events-none z-0 lg:-left-[10vw]" : "left-0 z-0",
       )}>
       <canvas
         ref={canvasRef}
         className={"h-full w-full"}
-        style={{ display: vrmEnabled ? "block" : "none" }}
+        style={{ display: vrmEnabled && vrmUrl ? "block" : "none" }}
       ></canvas>
       {isLoading && (
         <div

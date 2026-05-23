@@ -16,8 +16,12 @@ const DynamicMessageInput = dynamic(() =>
  */
 export const MessageInputContainer = ({
   isChatProcessing,
+  onDomainAccessDialogOpenChange,
+  domainAccessPromptNonce,
 }: {
   isChatProcessing: boolean;
+  onDomainAccessDialogOpenChange?: (open: boolean) => void;
+  domainAccessPromptNonce?: number;
 }) => {
   const [userMessage, setUserMessage] = useState("");
 
@@ -33,6 +37,8 @@ export const MessageInputContainer = ({
       setUserMessage={setUserMessage}
       isChatProcessing={isChatProcessing}
       onChangeUserMessage={(e) => setUserMessage(e.target.value)}
+      onDomainAccessDialogOpenChange={onDomainAccessDialogOpenChange}
+      domainAccessPromptNonce={domainAccessPromptNonce}
     />
   );
 };

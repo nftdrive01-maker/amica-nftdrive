@@ -2,6 +2,7 @@ import * as ort from "onnxruntime-web"
 ort.env.wasm.wasmPaths = '/_next/static/chunks/'
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import { useMicVAD } from "@ricky0123/vad-react"
 import { IconButton } from "./iconButton";
 import { useTranscriber } from "@/hooks/useTranscriber";
@@ -12,35 +13,17 @@ import { ChatContext } from "@/features/chat/chatContext";
 import { openaiWhisper  } from "@/features/openaiWhisper/openaiWhisper";
 import { whispercpp  } from "@/features/whispercpp/whispercpp";
 import { config, defaultConfig, updateConfig, updateConfigBatch } from "@/utils/config";
+import { alphaColor, normalizeThemeColor } from "@/utils/domainTheme";
 import { WaveFile } from "wavefile";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { AudioControlsContext } from "@/features/moshi/components/audioControlsContext";
-import { fetchPublicDomainOptions } from "@/lib/injectionClient";
+import { fetchPublicDomainOptions, loginDomainAccess, type PublicDomainOption } from "@/lib/injectionClient";
+import { hasDomainAccessSession, setDomainAccessSession } from "@/lib/domainAccessSession";
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { buildUrl } from "@/utils/buildUrl";
 import { createWebSpeechTranscriber, isWebSpeechSupported, WebSpeechAudioLevel, WebSpeechController } from "@/features/webSpeech/webSpeech";
 
-type DomainOption = {
-  id: string;
-  label: string;
-  chronicleAttached?: boolean;
-  bgUrl?: string;
-  characterName?: string;
-  vrmEnabled?: boolean;
-  vrmUrl?: string;
-  imageAvatarIdleUrl?: string;
-  imageAvatarTalkUrl?: string;
-  imageAvatarTalkIntervalMs?: number;
-  ttsMuted?: boolean;
-  stylebertvits2ModelId?: string;
-  stylebertvits2Style?: string;
-  gazeWakeEnabled?: boolean;
-  gazeHoldMs?: number;
-  gazeReleaseMs?: number;
-  gazeCooldownMs?: number;
-  gazeGreetings?: string[];
-  gazeDebugUiEnabled?: boolean;
-};
+type DomainOption = PublicDomainOption;
 
 type GazeDebugState = {
   status: string;
@@ -154,6 +137,8 @@ export default function MessageInput({
   setUserMessage,
   isChatProcessing,
   onChangeUserMessage,
+  onDomainAccessDialogOpenChange,
+  domainAccessPromptNonce,
 }: {
   userMessage: string;
   setUserMessage: (message: string) => void;
@@ -161,6 +146,8 @@ export default function MessageInput({
   onChangeUserMessage: (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => void;
+  onDomainAccessDialogOpenChange?: (open: boolean) => void;
+  domainAccessPromptNonce?: number;
 }) {
   const transcriber = useTranscriber();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -198,18 +185,25 @@ export default function MessageInput({
     return config("injection_default_domain");
   });
   const lastVadErrorMessageRef = useRef<string | null>(null);
+  const [domainAccessDialogDomain, setDomainAccessDialogDomain] = useState<DomainOption | null>(null);
+  const [domainAccessUsername, setDomainAccessUsername] = useState('');
+  const [domainAccessPassword, setDomainAccessPassword] = useState('');
+  const [domainAccessError, setDomainAccessError] = useState('');
+  const [domainAccessBusy, setDomainAccessBusy] = useState(false);
+  const [dismissedDomainAccessDomainId, setDismissedDomainAccessDomainId] = useState('');
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
     name: config("name"),
-    bgUrl: defaultConfig("bg_url"),
+    bgUrl: config("bg_url"),
     bgColor: config("bg_color"),
-    vrmUrl: defaultConfig("vrm_url"),
-    vrmHash: defaultConfig("vrm_hash"),
-    vrmSaveType: defaultConfig("vrm_save_type"),
-    imageAvatarIdleUrl: defaultConfig('image_avatar_idle_url'),
-    imageAvatarTalkUrl: defaultConfig('image_avatar_talk_url'),
-    imageAvatarTalkIntervalMs: parseInt(defaultConfig('image_avatar_talk_interval_ms'), 10) || 180,
+    themeColor: config("theme_color"),
+    vrmUrl: config("vrm_url"),
+    vrmHash: config("vrm_hash"),
+    vrmSaveType: config("vrm_save_type"),
+    imageAvatarIdleUrl: config('image_avatar_idle_url'),
+    imageAvatarTalkUrl: config('image_avatar_talk_url'),
+    imageAvatarTalkIntervalMs: parseInt(config('image_avatar_talk_interval_ms'), 10) || 180,
     ttsMuted: config("tts_muted"),
     stylebertvits2ModelId: config("stylebertvits2_model_id"),
     stylebertvits2Style: config("stylebertvits2_style"),
@@ -247,6 +241,7 @@ export default function MessageInput({
         label: config("injection_default_domain_label"),
         chronicleAttached: false,
         bgUrl: '',
+        themeColor: '',
         characterName: '',
         vrmUrl: '',
         imageAvatarIdleUrl: '',
@@ -277,6 +272,7 @@ export default function MessageInput({
           label: String(item.label ?? item.name ?? item.id).trim(),
           chronicleAttached: Boolean(item.chronicleAttached),
           bgUrl: String(item.bgUrl ?? '').trim(),
+          themeColor: String(item.themeColor ?? '').trim(),
           characterName: String(item.characterName ?? '').trim(),
           vrmEnabled: typeof item.vrmEnabled === 'boolean' ? item.vrmEnabled : true,
           vrmUrl: String(item.vrmUrl ?? '').trim(),
@@ -323,6 +319,13 @@ export default function MessageInput({
     domainOptions.find((domain: DomainOption) => domain.id === selectedDomain)?.label ||
     config("injection_default_domain_label");
   const selectedDomainOption = domainOptions.find((domain: DomainOption) => domain.id === selectedDomain);
+  const selectedDomainThemeColor = normalizeThemeColor(selectedDomainOption?.themeColor || '');
+  const accentButtonStyle = selectedDomainThemeColor
+    ? {
+        backgroundColor: selectedDomainThemeColor,
+        boxShadow: `0 10px 24px ${alphaColor(selectedDomainThemeColor, 0.24)}`,
+      }
+    : undefined;
   const selectedDomainGazeEnabled = selectedDomainOption?.gazeWakeEnabled ?? true;
   const selectedDomainGazeDebugUiEnabled = selectedDomainOption?.gazeDebugUiEnabled ?? false;
   const selectedDomainGazeHoldMs = selectedDomainOption?.gazeHoldMs ?? DEFAULT_GAZE_HOLD_MS;
@@ -340,6 +343,48 @@ export default function MessageInput({
       setChronicleEnabledForInput(false);
     }
   }, [selectedDomainHasChronicle]);
+
+  useEffect(() => {
+    onDomainAccessDialogOpenChange?.(Boolean(domainAccessDialogDomain));
+
+    return () => {
+      onDomainAccessDialogOpenChange?.(false);
+    };
+  }, [domainAccessDialogDomain, onDomainAccessDialogOpenChange]);
+
+  useEffect(() => {
+    if (!selectedDomainOption?.accessControlEnabled) {
+      return;
+    }
+
+    if (
+      hasDomainAccessSession(selectedDomainOption.id) ||
+      domainAccessDialogDomain ||
+      dismissedDomainAccessDomainId === selectedDomainOption.id
+    ) {
+      return;
+    }
+
+    setDismissedDomainAccessDomainId('');
+    setDomainAccessDialogDomain(selectedDomainOption);
+    setDomainAccessUsername('');
+    setDomainAccessPassword('');
+    setDomainAccessError('');
+  }, [dismissedDomainAccessDomainId, domainAccessDialogDomain, selectedDomainOption]);
+
+  useEffect(() => {
+    if (!domainAccessPromptNonce) {
+      return;
+    }
+
+    if (!selectedDomainOption?.accessControlEnabled || hasDomainAccessSession(selectedDomainOption.id)) {
+      return;
+    }
+
+    setDismissedDomainAccessDomainId('');
+    setDomainAccessDialogDomain(selectedDomainOption);
+    setDomainAccessError('');
+  }, [domainAccessPromptNonce, selectedDomainOption]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -508,11 +553,17 @@ export default function MessageInput({
     });
   }, []);
 
-  const applyDomainOverrides = useCallback(async (domain: DomainOption | undefined) => {
+  const pendingVrmUrlRef = useRef<string | null>(null);
+
+  const applyDomainOverrides = useCallback(async (
+    domain: DomainOption | undefined,
+    options?: { forceReloadVrm?: boolean },
+  ) => {
     const baseline = initialDomainConfigRef.current;
     const previousVrmUrl = config('vrm_url');
     const nextVrmEnabled = domain?.vrmEnabled ?? true;
     const nextName = domain?.characterName?.trim() || baseline.name;
+    const nextThemeColor = domain?.themeColor?.trim() || baseline.themeColor;
     const normalizedBaselineBgUrl = toRuntimeAssetUrl(baseline.bgUrl || '');
     const normalizedBaselineVrmUrl = toRuntimeAssetUrl(baseline.vrmUrl || '');
     const requestedBgUrl = toRuntimeAssetUrl(domain?.bgUrl?.trim() || normalizedBaselineBgUrl);
@@ -537,6 +588,7 @@ export default function MessageInput({
     const configEntries: Array<[string, string]> = [
       ['name', nextName],
       ['bg_url', resolvedBgUrl],
+      ['theme_color', nextThemeColor],
       ['vrm_enabled', nextVrmEnabled ? 'true' : 'false'],
       ['vrm_url', resolvedVrmUrl],
       ['vrm_hash', resolvedVrmHash],
@@ -572,11 +624,15 @@ export default function MessageInput({
         document.body.style.backgroundColor = baseline.bgColor;
       } else {
         document.body.style.backgroundColor = '';
-        document.body.style.backgroundImage = normalizedBaselineBgUrl ? `url(${toRenderableUrl(normalizedBaselineBgUrl)})` : '';
+        document.body.style.backgroundImage = '';
       }
     }
 
-    if (nextVrmEnabled && viewer.isReady && resolvedVrmUrl && previousVrmUrl !== resolvedVrmUrl) {
+    if (nextVrmEnabled && !viewer.isReady && resolvedVrmUrl) {
+      pendingVrmUrlRef.current = resolvedVrmUrl;
+    }
+
+    if (nextVrmEnabled && viewer.isReady && resolvedVrmUrl && (options?.forceReloadVrm || previousVrmUrl !== resolvedVrmUrl)) {
       try {
         await viewer.loadVrm(toRenderableUrl(resolvedVrmUrl), () => {});
         // VrmViewer の lastLoadedUrlRef と同期して二重ロードを防ぐ
@@ -600,7 +656,7 @@ export default function MessageInput({
           `ドメイン「${domain?.label ?? domain?.id ?? 'unknown'}」のVRMを読み込めなかったため、デフォルトVRMへ戻しました。`
         );
 
-        if (nextVrmEnabled && viewer.isReady && fallbackVrmUrl && previousVrmUrl !== fallbackVrmUrl) {
+        if (nextVrmEnabled && viewer.isReady && fallbackVrmUrl && (options?.forceReloadVrm || previousVrmUrl !== fallbackVrmUrl)) {
           try {
             await viewer.loadVrm(toRenderableUrl(fallbackVrmUrl), () => {});
             window.dispatchEvent(new CustomEvent('amica:vrm-externally-loaded', { detail: { url: toRenderableUrl(fallbackVrmUrl) } }));
@@ -615,12 +671,37 @@ export default function MessageInput({
   // selectedDomain を ref で保持し、callback の依存から除外することで
   // ドメイン選択時に useEffect が再発火するのを防ぐ
   const selectedDomainRef = useRef(selectedDomain);
+  const missingDomainWarningRef = useRef('');
   useEffect(() => {
     selectedDomainRef.current = selectedDomain;
   }, [selectedDomain]);
 
-  // viewer が ready になったあとに VRM を再ロードするための ref
-  const pendingVrmUrlRef = useRef<string | null>(null);
+  const applySelectedDomain = useCallback((domainId: string) => {
+    setSelectedDomain(domainId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('amica_selected_domain_id', domainId);
+      window.dispatchEvent(new CustomEvent('amica:domain-changed', { detail: { domainId } }));
+    }
+  }, []);
+
+  const openDomainAccessDialog = useCallback((domain: DomainOption) => {
+    setDismissedDomainAccessDomainId('');
+    setDomainAccessDialogDomain(domain);
+    setDomainAccessUsername('');
+    setDomainAccessPassword('');
+    setDomainAccessError('');
+  }, []);
+
+  const handleDomainOptionClick = useCallback((domain: DomainOption) => {
+    if (domain.accessControlEnabled && !hasDomainAccessSession(domain.id)) {
+      openDomainAccessDialog(domain);
+      setDomainMenuOpen(false);
+      return;
+    }
+
+    applySelectedDomain(domain.id);
+    setDomainMenuOpen(false);
+  }, [applySelectedDomain, openDomainAccessDialog]);
 
   useEffect(() => {
     const domain = domainOptions.find((item) => item.id === selectedDomain);
@@ -633,6 +714,7 @@ export default function MessageInput({
       domainId: selectedDomain,
       bgUrl: domain?.bgUrl || '',
       characterName: domain?.characterName || '',
+      themeColor: domain?.themeColor || '',
       vrmEnabled: domain?.vrmEnabled ?? true,
       vrmUrl: domain?.vrmUrl || '',
       imageAvatarIdleUrl: domain?.imageAvatarIdleUrl || '',
@@ -689,9 +771,15 @@ export default function MessageInput({
 
       setDomainOptions(optionsFromApi);
 
+      const currentDomainId = selectedDomainRef.current;
+      const hasCurrent = optionsFromApi.some((domain) => domain.id === currentDomainId);
+
+      if (hasCurrent) {
+        missingDomainWarningRef.current = '';
+      }
+
       if (preferCurrent) {
         // メニュー展開時: 現在の選択が選択肢にあればそのまま維持
-        const hasCurrent = optionsFromApi.some((domain) => domain.id === selectedDomainRef.current);
         if (hasCurrent) {
           return;
         }
@@ -702,31 +790,46 @@ export default function MessageInput({
       const hasSaved = savedId && optionsFromApi.some((domain) => domain.id === savedId);
 
       const applyFallbackSelection = (id: string) => {
-        setSelectedDomain(id);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('amica_selected_domain_id', id);
-        }
+        applySelectedDomain(id);
       };
+
+      const fallbackDomainId = (() => {
+        const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
+        if (hasDefault) {
+          return defaultDomainId;
+        }
+
+        return optionsFromApi[0]?.id ?? '';
+      })();
+
+      if (currentDomainId && !hasCurrent && fallbackDomainId) {
+        if (missingDomainWarningRef.current !== currentDomainId) {
+          missingDomainWarningRef.current = currentDomainId;
+          const fallbackLabel =
+            optionsFromApi.find((domain) => domain.id === fallbackDomainId)?.label || fallbackDomainId;
+          alert.warning(
+            'ドメインを読み込めませんでした',
+            `選択中のドメイン「${currentDomainId}」が見つからなかったため、「${fallbackLabel}」へ切り替えました。`
+          );
+        }
+
+        applyFallbackSelection(fallbackDomainId);
+        return;
+      }
 
       if (hasSaved) {
         applyFallbackSelection(savedId!);
       } else {
         // 保存済みも現在選択中も存在しない場合は default → 先頭の順で決定し、起動時の揺れを防ぐ
-        const hasDefault = optionsFromApi.some((domain) => domain.id === defaultDomainId);
-        if (hasDefault) {
-          applyFallbackSelection(defaultDomainId);
-        } else {
-          const firstDomainId = optionsFromApi[0]?.id ?? '';
-          if (firstDomainId) {
-            applyFallbackSelection(firstDomainId);
-          }
+        if (fallbackDomainId) {
+          applyFallbackSelection(fallbackDomainId);
         }
       }
     } catch {
       // API失敗時は既存の選択肢/選択値を維持
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 初回マウント後に再生成しない
+  }, [alert, applySelectedDomain]); // 初回マウント後に再生成しない
 
   useEffect(() => {
     void refreshDomainOptions(false);
@@ -1419,15 +1522,8 @@ export default function MessageInput({
   }
 
   return (
-    <div className="fixed bottom-2 z-20 w-full">
-      <div className="mx-auto max-w-4xl p-2 backdrop-blur-lg border-0 rounded-lg">
-        <div className="mb-1 px-1 text-xs text-white/90">
-          ナレッジ：{selectedDomainLabel}
-          {selectedDomainHasChronicle ? ' • CHRONICLE接続' : ' • CHRONICLE未接続'}
-        </div>
-        <div className="mb-1 px-1 text-[11px] text-white/80">
-          STT: {currentSTTLabel} | TTS: {currentTTSLabel} | AI: {currentChatbotLabel} ({currentAIModel})
-        </div>
+    <div className={clsx("fixed bottom-2 w-full", domainAccessDialogDomain ? "z-[130]" : "z-20")}>
+      <div className="mx-auto max-w-4xl rounded-lg border border-slate-700/60 bg-slate-900/80 p-2 shadow-lg backdrop-blur-md">
         {selectedDomainGazeDebugUiEnabled && (
           <div className="mb-1 px-1 text-[10px] text-white/70">
             視線: {gazeWakeEnabled ? 'ON' : 'OFF'} / {gazeDebug.status}
@@ -1444,28 +1540,38 @@ export default function MessageInput({
             )}
           </div>
         )}
-        <div className="grid grid-flow-col grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content] gap-[8px]">
-          <div className="flex flex-col justify-center items-center">
-            <button
-              type="button"
-              className={`h-8 w-8 rounded-lg text-white active:scale-[0.98] flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 ${gazeWakeEnabled ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-secondary hover:bg-secondary-hover active:bg-secondary-press'}`}
-              onClick={() => setGazeWakeEnabled((prev) => !prev)}
-              disabled={!selectedDomainGazeEnabled}
-              title={!selectedDomainGazeEnabled ? 'このドメインでは視線起動が無効です' : gazeWakeEnabled ? '視線起動: ON' : '視線起動: OFF'}
-              aria-label={gazeWakeEnabled ? '視線起動をオフ' : '視線起動をオン'}
-            >
-              👀
-            </button>
-          </div>
+        <div
+          className={clsx(
+            "grid grid-flow-col gap-[8px]",
+            selectedDomainGazeEnabled
+              ? "grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content]"
+              : "grid-cols-[min-content_min-content_min-content_1fr_min-content]"
+          )}
+        >
+          {selectedDomainGazeEnabled && (
+            <div className="flex flex-col justify-center items-center">
+              <button
+                type="button"
+                className={`h-8 w-8 rounded-lg text-white active:scale-[0.98] flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 ${gazeWakeEnabled ? 'hover:brightness-110 active:brightness-95' : 'bg-secondary hover:bg-secondary-hover active:bg-secondary-press'}`}
+                onClick={() => setGazeWakeEnabled((prev) => !prev)}
+                title={gazeWakeEnabled ? '視線起動: ON' : '視線起動: OFF'}
+                aria-label={gazeWakeEnabled ? '視線起動をオフ' : '視線起動をオン'}
+                style={gazeWakeEnabled ? accentButtonStyle : undefined}
+              >
+                👀
+              </button>
+            </div>
+          )}
 
           <div>
             <div className='flex flex-col justify-center items-center'>
               {config("chatbot_backend") === "moshi" ? (
                 <IconButton
                 iconName={!moshiMuted ? "24/PauseAlt" : "24/Microphone"}
-                className="bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"
+                className={selectedDomainThemeColor ? "hover:brightness-110 active:brightness-95 disabled:opacity-50" : "bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
                 isProcessing={moshiMuted && moshi.getRecorder() != null}
                 disabled={!moshi.getRecorder()}
+                style={accentButtonStyle}
                 onClick={() => {
                   moshi.toggleMute();
                   setMoshiMuted(!moshiMuted);
@@ -1474,12 +1580,13 @@ export default function MessageInput({
               ) : (
                 <IconButton
                 iconName={(isWebSpeechBackend ? webSpeechListening : vad.listening) ? "24/PauseAlt" : "24/Microphone"}
-                className="bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"
+                className={selectedDomainThemeColor ? "hover:brightness-110 active:brightness-95 disabled:opacity-50" : "bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
                 isProcessing={isWebSpeechBackend ? webSpeechListening : vad.userSpeaking}
                 disabled={
                   config('stt_backend') === 'none' ||
                   (isWebSpeechBackend ? !isWebSpeechSupported() : (vad.loading || Boolean(vad.errored)))
                 }
+                style={accentButtonStyle}
                 onClick={isWebSpeechBackend ? toggleWebSpeech : vad.toggle}
               />
               )}
@@ -1498,7 +1605,7 @@ export default function MessageInput({
                   void refreshDomainOptions(true);
                 }
               }}
-              title={`ナレッジ: ${selectedDomainLabel}`}
+              title={`ドメイン: ${selectedDomainLabel}`}
             >
               {/* 本（ナレッジ）アイコン */}
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
@@ -1511,20 +1618,19 @@ export default function MessageInput({
 
             {domainMenuOpen && (
               <div className="absolute bottom-10 left-0 z-30 min-w-[160px] rounded-md bg-white shadow-md ring-1 ring-gray-200">
-                {domainOptions.map((domain: { id: string; label: string }) => (
+                {domainOptions.map((domain: DomainOption) => (
                   <button
                     key={domain.id}
                     type="button"
                     className={`block w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${selectedDomain === domain.id ? 'font-bold' : ''}`}
-                    onClick={() => {
-                      setSelectedDomain(domain.id);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('amica_selected_domain_id', domain.id);
-                      }
-                      setDomainMenuOpen(false);
-                    }}
+                    onClick={() => handleDomainOptionClick(domain)}
                   >
-                    {domain.label}
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="truncate">{domain.label}</span>
+                      {domain.accessControlEnabled && !hasDomainAccessSession(domain.id) ? (
+                        <span className="shrink-0 text-[11px] font-semibold text-amber-700">認証</span>
+                      ) : null}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1567,7 +1673,7 @@ export default function MessageInput({
             )}
           </div>
 
-          <div className="flex w-full items-center gap-2 rounded-md bg-white px-2 py-1 shadow-sm ring-1 ring-inset ring-gray-300 focus-within:ring-1 focus-within:ring-inset focus-within:ring-gray-400">
+          <div className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/70 px-2 py-1 shadow-sm ring-1 ring-inset ring-slate-700/50 focus-within:ring-slate-500/80">
             {selectedDomainHasChronicle && chronicleEnabledForInput && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
                   CHRONICLE
@@ -1586,7 +1692,7 @@ export default function MessageInput({
             <input
               type="text"
               ref={inputRef}
-              placeholder={config("chatbot_backend") === "moshi" ? "Disabled in moshi chatbot" : "Write message here..."}
+              placeholder={config("chatbot_backend") === "moshi" ? "Disabled in moshi chatbot" : "質問してみましょう"}
               onChange={handleInputChange}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -1602,7 +1708,7 @@ export default function MessageInput({
                 }
               }}
               disabled={config("chatbot_backend") === "moshi"}
-              className="disabled block w-full border-0 bg-transparent py-0.5 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm sm:leading-6"
+              className="disabled block w-full border-0 bg-transparent py-0.5 text-white placeholder:text-slate-400 focus:ring-0 sm:text-sm sm:leading-6"
               value={userMessage}
               autoComplete="off"
             />
@@ -1611,14 +1717,118 @@ export default function MessageInput({
           <div className='flex flex-col justify-center items-center'>
             <IconButton
               iconName="24/Send"
-              className="ml-2 bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"
+              className={selectedDomainThemeColor ? "ml-2 hover:brightness-110 active:brightness-95 disabled:opacity-50" : "ml-2 bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
               isProcessing={isChatProcessing || transcriber.isBusy}
               disabled={isChatProcessing || !userMessage || transcriber.isModelLoading || config("chatbot_backend") === "moshi"}
+              style={accentButtonStyle}
               onClick={clickedSendButton}
             />
           </div>
         </div>
       </div>
+
+      {domainAccessDialogDomain && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="domain-access-dialog-title">
+            <div className="mb-4">
+              <h3 id="domain-access-dialog-title" className="text-lg font-bold text-slate-900">ドメイン認証</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {domainAccessDialogDomain.label} に入るにはユーザー名とパスワードが必要です。
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                <span>ユーザー名</span>
+                <input
+                  type="text"
+                  value={domainAccessUsername}
+                  onChange={(e) => setDomainAccessUsername(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                <span>パスワード</span>
+                <input
+                  type="password"
+                  value={domainAccessPassword}
+                  onChange={(e) => setDomainAccessPassword(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                />
+              </label>
+
+              {domainAccessError ? (
+                <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {domainAccessError}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                onClick={() => {
+                  if (domainAccessDialogDomain) {
+                    setDismissedDomainAccessDomainId(domainAccessDialogDomain.id);
+                  }
+                  setDomainAccessDialogDomain(null);
+                  setDomainAccessError('');
+                  setDomainAccessPassword('');
+                }}
+                disabled={domainAccessBusy}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-400"
+                disabled={domainAccessBusy}
+                onClick={async () => {
+                  const domain = domainAccessDialogDomain;
+                  if (!domain) {
+                    return;
+                  }
+
+                  if (!domainAccessUsername.trim() || !domainAccessPassword) {
+                    setDomainAccessError('ユーザー名とパスワードを入力してください');
+                    return;
+                  }
+
+                  setDomainAccessBusy(true);
+                  setDomainAccessError('');
+                  try {
+                    const result = await loginDomainAccess(domain.id, domainAccessUsername.trim(), domainAccessPassword);
+                    if (!result.ok || !result.accessToken) {
+                      setDomainAccessError(result.error || '認証に失敗しました');
+                      return;
+                    }
+
+                    setDomainAccessSession(domain.id, {
+                      username: result.username || domainAccessUsername.trim(),
+                      accessToken: result.accessToken,
+                    });
+                    if (selectedDomainRef.current === domain.id) {
+                      appliedDomainConfigRef.current = null;
+                      await applyDomainOverrides(domain, { forceReloadVrm: true });
+                    }
+                    applySelectedDomain(domain.id);
+                    setDomainAccessDialogDomain(null);
+                    setDomainAccessUsername('');
+                    setDomainAccessPassword('');
+                    setDomainAccessError('');
+                  } finally {
+                    setDomainAccessBusy(false);
+                  }
+                }}
+              >
+                {domainAccessBusy ? '認証中...' : 'ログイン'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

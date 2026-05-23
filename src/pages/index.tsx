@@ -14,6 +14,7 @@ import {
   Bars3Icon,
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
+  ClockIcon,
   CloudArrowDownIcon,
   CodeBracketSquareIcon,
   CubeIcon,
@@ -55,20 +56,25 @@ import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
 import { AlertContext } from "@/features/alert/alertContext";
 
-import { config, updateConfig } from '@/utils/config';
+import { CONFIG_UPDATED_EVENT, config, updateConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
 import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
 import { ChatModeText } from "@/components/chatModeText";
+import { HistoryPanel } from "@/components/historyPanel";
 import { ImageAvatar } from "@/components/imageAvatar";
+import { DefaultArkCoreBackground } from "@/components/defaultArkCoreBackground";
+import { DefaultArkCoreAvatar } from "@/components/defaultArkCoreAvatar";
 
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
-import { VerticalSwitchBox } from "@/components/switchBox";
+import { chatHistoryStore, mapMessagesToHistoryEntries } from "@/features/chatHistory/chatHistoryStore";
 import { ThoughtText } from "@/components/thoughtText";
 import { WaitingScreen } from "@/components/waitingScreen";
 import { acquireSession, sessionManager } from "@/lib/sessionManager";
+import { fetchPublicDomainOptions, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
+import { getPersistentUserId } from "@/lib/userIdentity";
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -81,6 +87,38 @@ const montserrat = Montserrat({
   display: "swap",
   subsets: ["latin"],
 });
+
+const sttBackendLabels: Record<string, string> = {
+  none: 'None',
+  whisper_browser: 'Whisper (Browser)',
+  web_speech: 'Web Speech API',
+  whisper_openai: 'Whisper (OpenAI)',
+  whispercpp: 'Whisper.cpp',
+};
+
+const ttsBackendLabels: Record<string, string> = {
+  none: 'None',
+  elevenlabs: 'ElevenLabs',
+  speecht5: 'SpeechT5',
+  openai_tts: 'OpenAI TTS',
+  localXTTS: 'Alltalk TTS',
+  piper: 'Piper',
+  coquiLocal: 'Coqui Local',
+  kokoro: 'Kokoro',
+  stylebertvits2: 'Style-Bert-VITS2',
+};
+
+const chatbotBackendLabels: Record<string, string> = {
+  echo: 'Echo',
+  arbius_llm: 'Arbius',
+  chatgpt: 'ChatGPT',
+  llamacpp: 'Llama.cpp',
+  windowai: 'Window.ai',
+  ollama: 'Ollama',
+  koboldai: 'KoboldAI',
+  moshi: 'Moshi',
+  openrouter: 'OpenRouter',
+};
 
 function detectVRHeadset() {
   const userAgent = navigator.userAgent.toLowerCase();
@@ -130,6 +168,7 @@ export default function Home() {
   const [chatProcessing, setChatProcessing] = useState(false);
   const [chatLog, setChatLog] = useState<Message[]>([]);
   const [assistantMessage, setAssistantMessage] = useState("");
+  const [assistantDbResult, setAssistantDbResult] = useState<Message["dbResult"] | undefined>(undefined);
   const [userMessage, setUserMessage] = useState("");
   const [thoughtMessage, setThoughtMessage] = useState("");
   const [shownMessage, setShownMessage] = useState<Role>("system");
@@ -143,11 +182,21 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [showChatLog, setShowChatLog] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-  const [showChatMode, setShowChatMode] = useState(false);
+  const [showChatMode, setShowChatMode] = useState(() => config("show_chat_mode") === "true");
+  const [showHistory, setShowHistory] = useState(false);
   const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMainMenu, setShowMainMenu] = useState(false);
+
+  useEffect(() => {
+    void updateConfig("show_chat_mode", showChatMode ? "true" : "false");
+  }, [showChatMode]);
   const [showMoshi, setShowMoshi] = useState(false);
   const mainMenuRef = useRef<HTMLDivElement>(null);
+  const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
+  const [selectedDomainGazeEnabled, setSelectedDomainGazeEnabled] = useState(true);
+  const [selectedDomainLabel, setSelectedDomainLabel] = useState(() => config('injection_default_domain_label') || 'デフォルト');
+  const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
+  const [domainDisplayVersion, setDomainDisplayVersion] = useState(0);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -163,7 +212,52 @@ export default function Home() {
   const [isVRHeadset, setIsVRHeadset] = useState(false);
 
   const [sessionBlocked, setSessionBlocked] = useState(false);
+  const [domainAuthDialogOpen, setDomainAuthDialogOpen] = useState(false);
+  const [domainAccessPromptNonce, setDomainAccessPromptNonce] = useState(0);
+  const [attachedPackDetails, setAttachedPackDetails] = useState<{
+    mcpServers: string[];
+    knowledges: string[];
+    isReachable: boolean;
+  }>({
+    mcpServers: [],
+    knowledges: [],
+    isReachable: true,
+  });
 
+  const currentSTTBackend = config('stt_backend');
+  const currentTTSBackend = config('tts_backend');
+  const currentChatbotBackend = config('chatbot_backend');
+  const currentSTTLabel = sttBackendLabels[currentSTTBackend] ?? currentSTTBackend;
+  const currentTTSLabel = ttsBackendLabels[currentTTSBackend] ?? currentTTSBackend;
+  const currentChatbotLabel = chatbotBackendLabels[currentChatbotBackend] ?? currentChatbotBackend;
+  const currentAIModel = (() => {
+    switch (currentChatbotBackend) {
+      case 'arbius_llm':
+        return config('arbius_llm_model_id');
+      case 'openai':
+        return config('openai_model');
+      case 'ollama':
+        return config('ollama_model');
+      case 'llamacpp':
+        return config('llamacpp_url');
+      case 'koboldai':
+        return config('koboldai_url');
+      case 'moshi':
+        return config('moshi_url');
+      default:
+        return '';
+    }
+  })();
+
+
+  useEffect(() => {
+    if (!domainAuthDialogOpen) {
+      return;
+    }
+
+    setShowHistory(false);
+    setShowMainMenu(false);
+  }, [domainAuthDialogOpen]);
 
   useEffect(() => {
     amicaLife.checkSettingOff(!showSettings);
@@ -176,20 +270,23 @@ export default function Home() {
 
     setShowArbiusIntroduction(config("show_arbius_introduction") === 'true');
 
-    if (config("bg_color") !== '') {
-      document.body.style.backgroundColor = config("bg_color");
+    const bgColor = config("bg_color");
+    const bgUrl = config("bg_url");
+
+    if (bgColor !== '') {
+      document.body.style.backgroundImage = '';
+      document.body.style.backgroundColor = bgColor;
+    } else if (bgUrl) {
+      document.body.style.backgroundColor = '';
+      document.body.style.backgroundImage = `url(${bgUrl})`;
     } else {
-      document.body.style.backgroundImage = `url(${config("bg_url")})`;
+      document.body.style.backgroundColor = '';
+      document.body.style.backgroundImage = '';
     }
     // Temp Disable : WebXR
     // if (window.navigator.xr && window.navigator.xr.isSessionSupported) {
     //   let deviceInfo = detectVRHeadset();
     //   setIsVRHeadset(deviceInfo.isVRDevice);
-
-    //   window.navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-    //     console.log('ar supported', supported);
-    //     setIsARSupported(supported);
-    //   });
     //   window.navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
     //     console.log('vr supported', supported);
     //     setIsVRSupported(supported);
@@ -223,17 +320,22 @@ export default function Home() {
   };
   
   const toggleChatLog = () => {
-    toggleState(setShowChatLog, [setShowSubconciousText, setShowChatMode]);
+    toggleState(setShowChatLog, [setShowSubconciousText, setShowChatMode, setShowHistory]);
   };
   
   const toggleShowSubconciousText = () => {
     if (subconciousLogs.length !== 0) {
       toggleState(setShowSubconciousText, [setShowChatLog, setShowChatMode]);
+      setShowHistory(false);
     }
   };
   
   const toggleChatMode = () => {
-    toggleState(setShowChatMode, [setShowChatLog, setShowSubconciousText]);
+    toggleState(setShowChatMode, [setShowChatLog, setShowSubconciousText, setShowHistory]);
+  };
+
+  const toggleHistory = () => {
+    toggleState(setShowHistory, [setShowChatLog, setShowSubconciousText, setShowChatMode]);
   };
 
   const toggleXR = async (immersiveType: XRSessionMode) => {
@@ -313,6 +415,7 @@ export default function Home() {
       setChatLog,
       setUserMessage,
       setAssistantMessage,
+      setAssistantDbResult,
       setThoughtMessage,
       setShownMessage,
       setChatProcessing,
@@ -337,6 +440,33 @@ export default function Home() {
 
   useEffect(() => {
     handleChatLogs(chatLog);
+  }, [chatLog]);
+
+  useEffect(() => {
+    void chatHistoryStore.upsertMessages(
+      chatLog,
+      sessionManager.getSessionId() || undefined,
+      getPersistentUserId(),
+    );
+  }, [chatLog]);
+
+  useEffect(() => {
+    const entries = mapMessagesToHistoryEntries(
+      chatLog,
+      sessionManager.getSessionId() || undefined,
+      getPersistentUserId(),
+    );
+    if (entries.length === 0) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      void syncServerChatHistory(entries);
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [chatLog]);
 
   useEffect(() => {
@@ -374,45 +504,186 @@ export default function Home() {
     };
   }, [showMainMenu]);
 
-  // this exists to prevent build errors with ssr
   useEffect(() => setShowContent(true), []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const syncSelectedDomain = (domainId?: string) => {
+      setSelectedDomainId(domainId || localStorage.getItem('amica_selected_domain_id') || config('injection_default_domain') || 'default');
+      setDomainDisplayVersion((prev) => prev + 1);
+    };
+
+    syncSelectedDomain();
+
+    const handleDomainChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ domainId?: string }>;
+      syncSelectedDomain(customEvent.detail?.domainId);
+    };
+
+    window.addEventListener('amica:domain-changed', handleDomainChanged as EventListener);
+
+    return () => {
+      window.removeEventListener('amica:domain-changed', handleDomainChanged as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleConfigUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ key?: string; keys?: string[]; batch?: boolean }>;
+      const updatedKeys = customEvent.detail?.batch
+        ? customEvent.detail?.keys || []
+        : customEvent.detail?.key
+          ? [customEvent.detail.key]
+          : [];
+
+      if (updatedKeys.some((key) => ['name', 'theme_color', 'bg_url', 'bg_color', 'vrm_enabled', 'vrm_url', 'image_avatar_idle_url', 'image_avatar_talk_url'].includes(key))) {
+        setDomainDisplayVersion((prev) => prev + 1);
+      }
+    };
+
+    window.addEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated as EventListener);
+    };
+  }, []);
 
   // 同時接続数制限: injection-tool が有効なときのみセッションを取得
   useEffect(() => {
     if (!showContent) return;
     const enabled = config('injection_tool_enabled')?.toLowerCase() === 'true';
     if (!enabled) return;
-    const domainId = config('injection_default_domain') || 'default';
+    if (sessionManager.getSessionId()) return;
+    const domainId = selectedDomainId || config('injection_default_domain') || 'default';
     acquireSession(domainId).then((result) => {
-      if (result.acquired) {
-        if (result.sessionId) sessionManager.start(result.sessionId);
+      if (result.acquired && !result.errorCode) {
+        if (result.sessionId) sessionManager.start(result.sessionId, domainId);
         setSessionBlocked(false);
+      } else if (result.errorCode === 'DOMAIN_AUTH_REQUIRED') {
+        setSessionBlocked(false);
+        setDomainAccessPromptNonce((prev) => prev + 1);
       } else {
         setSessionBlocked(true);
       }
     });
-  }, [showContent]);
+  }, [selectedDomainId, showContent]);
+
+  useEffect(() => {
+    if (!showContent) return;
+
+    let cancelled = false;
+
+    setAttachedPackDetails({
+      mcpServers: [],
+      knowledges: [],
+      isReachable: true,
+    });
+
+
+    const refreshAttachedPackDetails = async () => {
+      if (!selectedDomainId) return;
+
+      try {
+        const sessionId = sessionManager.getSessionId() || '';
+        const [attached, domains] = await Promise.all([
+          getServerAttachedPackDetails(sessionId, selectedDomainId),
+          fetchPublicDomainOptions(),
+        ]);
+        const domain = domains.find((item) => item.id === selectedDomainId);
+        const nextGazeEnabled = domain?.gazeWakeEnabled ?? true;
+        const nextDomainLabel = domain?.label || config('injection_default_domain_label') || 'デフォルト';
+        const nextChronicleAttached = Boolean(domain?.chronicleAttached);
+        const fallbackMcp = domain?.mcpServerIds ?? [];
+        const fallbackKnowledge = domain?.knowledgeIds ?? [];
+        const nextMcp = attached.mcpServers.length > 0
+          ? attached.mcpServers.map((item) => item.name || item.id)
+          : fallbackMcp;
+        const nextKnowledge = attached.knowledges.length > 0
+          ? attached.knowledges.map((item) => item.name || item.id)
+          : fallbackKnowledge;
+
+        if (!cancelled) {
+          if (attached.errorCode === 'DOMAIN_AUTH_REQUIRED') {
+            setDomainAccessPromptNonce((prev) => prev + 1);
+          }
+          setSelectedDomainGazeEnabled(nextGazeEnabled);
+          setSelectedDomainLabel(nextDomainLabel);
+          setSelectedDomainChronicleAttached(nextChronicleAttached);
+          setAttachedPackDetails({
+            mcpServers: nextMcp,
+            knowledges: nextKnowledge,
+            isReachable: attached.isReachable,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setSelectedDomainGazeEnabled(true);
+          setSelectedDomainLabel(config('injection_default_domain_label') || 'デフォルト');
+          setSelectedDomainChronicleAttached(false);
+          setAttachedPackDetails(prev => ({ ...prev, isReachable: false }));
+        }
+      }
+    };
+
+    void refreshAttachedPackDetails();
+    const timerId = window.setInterval(() => {
+      void refreshAttachedPackDetails();
+    }, 5000);
+
+    window.addEventListener('focus', refreshAttachedPackDetails);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+      window.removeEventListener('focus', refreshAttachedPackDetails);
+    };
+  }, [selectedDomainId, showContent]);
 
   if (!showContent) return <></>;
 
   if (sessionBlocked) {
-    const domainId = config('injection_default_domain') || 'default';
+    const domainId = selectedDomainId || config('injection_default_domain') || 'default';
     return (
       <WaitingScreen
         domainId={domainId}
         onAcquired={(sessionId) => {
-          sessionManager.start(sessionId);
+          sessionManager.start(sessionId, domainId);
           setSessionBlocked(false);
         }}
+        onSelectDomain={(nextDomainId) => {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('amica_selected_domain_id', nextDomainId);
+            window.dispatchEvent(new CustomEvent('amica:domain-changed', { detail: { domainId: nextDomainId } }));
+          }
+          setSessionBlocked(false);
+        }}
+        onDismiss={() => setSessionBlocked(false)}
       />
     );
   }
+
+  const hasConfiguredVrm = config("vrm_enabled") === "true" && config("vrm_url").trim() !== "";
+  const hasConfiguredImageAvatar =
+    config("image_avatar_idle_url").trim() !== "" || config("image_avatar_talk_url").trim() !== "";
+  const showDefaultArkCoreAvatar = !hasConfiguredVrm && !hasConfiguredImageAvatar;
+  const showDefaultArkCoreBackground =
+    config("bg_url") === '' &&
+    config("bg_color") === '' &&
+    config("vrm_enabled") !== "true";
 
   return (
     <div className={clsx(
       m_plus_2.variable,
       montserrat.variable,
     )}>
+      <DefaultArkCoreBackground visible={showDefaultArkCoreBackground} />
       {showStreamWindow && 
 
       <div className="fixed top-1/3 right-4 w-[200px] h-[150px] z-0">
@@ -444,6 +715,7 @@ export default function Home() {
       { config("chatbot_backend") === "moshi" && <Moshi setAssistantText={setAssistantMessage}/>  }
 
       <VrmStoreProvider>
+        <DefaultArkCoreAvatar visible={showDefaultArkCoreAvatar} speaking={chatSpeaking} />
         <ImageAvatar speaking={chatSpeaking} />
         <VrmViewer chatMode={showChatMode}/>
         {showSettings && (
@@ -453,10 +725,115 @@ export default function Home() {
         )}
       </VrmStoreProvider>
       
-      <MessageInputContainer isChatProcessing={chatProcessing} />
+      <MessageInputContainer
+        isChatProcessing={chatProcessing}
+        onDomainAccessDialogOpenChange={setDomainAuthDialogOpen}
+        domainAccessPromptNonce={domainAccessPromptNonce}
+      />
+
+      <div
+        className="fixed left-2 top-2 z-20 max-w-[320px] rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden"
+      >
+        {/* ヘッダーバー */}
+        <div
+          className={clsx(
+            "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold tracking-wide",
+            attachedPackDetails.isReachable
+              ? "bg-emerald-600/30 text-emerald-300"
+              : "bg-red-600/30 text-red-300"
+          )}
+        >
+          <span
+            className={clsx(
+              "inline-block w-1.5 h-1.5 rounded-full",
+              attachedPackDetails.isReachable
+                ? "bg-emerald-400"
+                : "bg-red-400"
+            )}
+          />
+          {!attachedPackDetails.isReachable ? "サーバー停止中" : "接続中"}
+        </div>
+
+        {/* コンテンツ */}
+        <div className="px-3 py-2 space-y-2">
+          <div className="space-y-1 rounded-md border border-slate-700/50 bg-slate-950/25 px-2 py-2">
+            <div className="text-[11px] font-semibold text-white/90">
+              ドメイン: <span className="text-white">{selectedDomainLabel}</span>
+            </div>
+            <div className="text-[10px] text-white/75">
+              {selectedDomainChronicleAttached ? 'CHRONICLE接続' : 'CHRONICLE未接続'}
+            </div>
+            <div className="text-[10px] leading-relaxed text-white/75">
+              STT: {currentSTTLabel} | TTS: {currentTTSLabel}
+            </div>
+            <div className="text-[10px] leading-relaxed text-white/75 break-all">
+              AI: {currentChatbotLabel}{currentAIModel ? ` (${currentAIModel})` : ''}
+            </div>
+          </div>
+
+          {/* MCP セクション */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">
+              MCP
+            </div>
+            {attachedPackDetails.mcpServers.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {attachedPackDetails.mcpServers.map((name) => (
+                  <span
+                    key={name}
+                    className={clsx(
+                      "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight",
+                      attachedPackDetails.isReachable
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : "bg-red-500/20 text-red-200"
+                    )}
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[11px] text-slate-500 italic">なし</span>
+            )}
+          </div>
+
+          {/* ナレッジ セクション */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">
+              ナレッジ
+            </div>
+            {attachedPackDetails.knowledges.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {attachedPackDetails.knowledges.map((name) => (
+                  <span
+                    key={name}
+                    className={clsx(
+                      "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight",
+                      attachedPackDetails.isReachable
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : "bg-red-500/20 text-red-200"
+                    )}
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[11px] text-slate-500 italic">なし</span>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* main menu */}
-      <div className="fixed right-2 top-2 z-20" ref={mainMenuRef}>
+      <div
+        className={clsx(
+          "fixed right-2 top-2 z-20",
+          domainAuthDialogOpen && "pointer-events-none opacity-0"
+        )}
+        ref={mainMenuRef}
+        aria-hidden={domainAuthDialogOpen}
+      >
         <button
           type="button"
           className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"
@@ -467,18 +844,52 @@ export default function Home() {
           {showMainMenu ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
         </button>
 
+        {selectedDomainGazeEnabled && (
+          <button
+            type="button"
+            className="mt-1 flex h-8 w-10 items-center justify-center rounded-md bg-slate-900/60 text-white backdrop-blur-md hover:bg-slate-800/80"
+            title="視線キャリブレーション"
+            aria-label="視線キャリブレーション"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('amica:gaze-calibrate'));
+              }
+            }}
+          >
+            👀
+          </button>
+        )}
+
         <button
           type="button"
-          className="mt-1 flex h-8 w-10 items-center justify-center rounded-md bg-slate-900/60 text-white backdrop-blur-md hover:bg-slate-800/80"
-          title="視線キャリブレーション"
-          aria-label="視線キャリブレーション"
-          onClick={() => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('amica:gaze-calibrate'));
-            }
-          }}
+          className={clsx(
+            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+            showChatMode
+              ? "bg-emerald-700/70 hover:bg-emerald-600/80"
+              : "bg-slate-900/60 hover:bg-slate-800/80"
+          )}
+          title={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
+          aria-label={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
+          aria-pressed={showChatMode}
+          onClick={toggleChatMode}
         >
-          👀
+          {showChatMode ? <Squares2X2Icon className="h-5 w-5" /> : <SquaresPlusIcon className="h-5 w-5" />}
+        </button>
+
+        <button
+          type="button"
+          className={clsx(
+            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+            showHistory
+              ? "bg-cyan-700/70 hover:bg-cyan-600/80"
+              : "bg-slate-900/60 hover:bg-slate-800/80"
+          )}
+          title={showHistory ? "履歴を閉じる" : "履歴を開く"}
+          aria-label={showHistory ? "履歴を閉じる" : "履歴を開く"}
+          aria-pressed={showHistory}
+          onClick={toggleHistory}
+        >
+          <ClockIcon className="h-5 w-5" />
         </button>
 
         {showMainMenu && (
@@ -613,14 +1024,6 @@ export default function Home() {
             )} */}
 
             <div className="flex flex-row items-center space-x-2">
-                <VerticalSwitchBox
-                  value={showChatMode}
-                  label={""}
-                  onChange={toggleChatMode}
-                />
-            </div>
-
-            <div className="flex flex-row items-center space-x-2">
               { showStreamWindow ? (
                 <SignalIcon
                   className="h-7 w-7 text-white opacity-100 hover:opacity-50 active:opacity-100 hover:cursor-pointer"
@@ -641,13 +1044,13 @@ export default function Home() {
         )}
       </div>
 
-      {showChatLog && <ChatLog messages={chatLog} />}
+      {showChatLog && <ChatLog key={`chat-log-${domainDisplayVersion}`} messages={chatLog} />}
 
       {/* Normal chat text */}
       {!showSubconciousText && ! showChatLog && ! showChatMode && (
         <>
           { shownMessage === 'assistant' && (
-            <AssistantText message={assistantMessage} />
+            <AssistantText key={`assistant-${domainDisplayVersion}`} message={assistantMessage} dbResult={assistantDbResult} />
           )}
           { shownMessage === 'user' && (
             <UserText message={userMessage} />
@@ -656,10 +1059,14 @@ export default function Home() {
       )}
 
       {/* Thought text */}
-      {thoughtMessage !== "" && <ThoughtText message={thoughtMessage}/>}
+      {thoughtMessage !== "" && <ThoughtText key={`thought-${domainDisplayVersion}`} message={thoughtMessage}/>}
 
       {/* Chat mode text */}
-      {showChatMode && <ChatModeText messages={chatLog}/>}
+      {showChatMode && <ChatModeText key={`chat-mode-${domainDisplayVersion}`} messages={chatLog}/>}
+
+      {showHistory && !domainAuthDialogOpen && <HistoryPanel open={showHistory} onClose={() => setShowHistory(false)} />}
+
+      {domainAuthDialogOpen ? <div className="fixed inset-0 z-[110] bg-slate-950" aria-hidden="true" /> : null}
 
       {/* Subconcious stored prompt text */}
       {showSubconciousText && <SubconciousText messages={subconciousLogs}/>}

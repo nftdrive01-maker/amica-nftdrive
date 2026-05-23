@@ -92,7 +92,7 @@ export const Settings = ({
 
   const [chatbotBackend, setChatbotBackend] = useState(config("chatbot_backend"));
   const [arbiusLLMModelId, setArbiusLLMModelId] = useState(config("arbius_llm_model_id"));
-  const [openAIApiKey, setOpenAIApiKey] = useState(config("openai_apikey"));
+  const [openAIApiKey, setOpenAIApiKey] = useState("");
   const [openAIUrl, setOpenAIUrl] = useState(config("openai_url"));
   const [openAIModel, setOpenAIModel] = useState(config("openai_model"));
   const [llamaCppUrl, setLlamaCppUrl] = useState(config("llamacpp_url"));

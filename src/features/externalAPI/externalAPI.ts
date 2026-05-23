@@ -1,4 +1,4 @@
-import { config, defaults, prefixed } from "@/utils/config";
+import { config, defaults, isSecretConfigKey, prefixed } from "@/utils/config";
 import isDev from "@/utils/isDev";
 import {
   MAX_STORAGE_TOKENS,
@@ -80,6 +80,10 @@ export async function handleConfig(
       let localStorageData: Record<string, string> = {};
 
       for (const key in defaults) {
+        if (isSecretConfigKey(key)) {
+          continue;
+        }
+
         const localKey = prefixed(key);
         const value = localStorage.getItem(localKey);
 

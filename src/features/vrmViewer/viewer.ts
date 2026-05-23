@@ -977,15 +977,15 @@ export class Viewer {
     let width = parentElement.clientWidth;
     let height = parentElement.clientHeight;
     if (on) {
-      width = width / 2;
-      height = height / 2;
+      const isDesktop = window.innerWidth >= 1024;
+      width = isDesktop ? width * 0.72 : width / 2;
+      height = isDesktop ? height : height / 2;
     }
 
     this.renderer.setSize(width, height);
 
     if (!this.camera) return;
-    this.camera.aspect =
-      parentElement.clientWidth / parentElement.clientHeight;
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
 

@@ -1,35 +1,33 @@
 import { Message } from "./messages";
-import { config } from '@/utils/config';
 
-function getApiKey(configKey: string) {
-  const apiKey = config(configKey);
-  if (!apiKey) {
-    throw new Error(`Invalid ${configKey} API Key`);
+function enqueueOpenAiSsePayload(
+  controller: ReadableStreamDefaultController,
+  payload: string,
+) {
+  const trimmed = payload.trim();
+  if (!trimmed || trimmed === "[DONE]") {
+    return;
   }
-  return apiKey;
+
+  const json = JSON.parse(trimmed);
+  const messagePiece = json.choices?.[0]?.delta?.content;
+  if (messagePiece) {
+    controller.enqueue(messagePiece);
+  }
 }
 
 async function getResponseStream(
   messages: Message[],
-  url: string,
-  model: string,
-  apiKey: string,
+  mode: "chat" | "vision" = "chat",
 ) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${apiKey}`,
-    "HTTP-Referer": "https://amica.arbius.ai",
-    "X-Title": "Amica",
-  };
-
-  const res = await fetch(`${url}/v1/chat/completions`, {
-    headers: headers,
+  const res = await fetch(`/api/openai/chat`, {
+    headers: {
+      "Content-Type": "application/json",
+    },
     method: "POST",
     body: JSON.stringify({
-      model,
       messages,
-      stream: true,
-      max_tokens: 200,
+      mode,
     }),
   });
 
@@ -48,35 +46,31 @@ async function getResponseStream(
   const stream = new ReadableStream({
     async start(controller: ReadableStreamDefaultController) {
       const decoder = new TextDecoder("utf-8");
+      let buffer = "";
       try {
-        // sometimes the response is chunked, so we need to combine the chunks
-        let combined = "";
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const data = decoder.decode(value);
-          const chunks = data
-            .split("data:")
-            .filter((val) => !!val && val.trim() !== "[DONE]");
+          buffer += decoder.decode(value, { stream: true });
 
-          for (const chunk of chunks) {
-            // skip comments
-            if (chunk.length > 0 && chunk[0] === ":") {
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.startsWith(":")) {
               continue;
             }
-            combined += chunk;
 
-            try {
-              const json = JSON.parse(combined);
-              const messagePiece = json.choices[0].delta.content;
-              combined = "";
-              if (!!messagePiece) {
-                controller.enqueue(messagePiece);
-              }
-            } catch (error) {
-              console.error(error);
+            if (trimmedLine.startsWith("data:")) {
+              enqueueOpenAiSsePayload(controller, trimmedLine.slice(5));
             }
           }
+        }
+
+        const tail = (buffer + decoder.decode()).trim();
+        if (tail.startsWith("data:")) {
+          enqueueOpenAiSsePayload(controller, tail.slice(5));
         }
       } catch (error) {
         console.error(error);
@@ -96,18 +90,11 @@ async function getResponseStream(
 }
 
 export async function getOpenAiChatResponseStream(messages: Message[]) {
-  const apiKey = getApiKey("openai_apikey");
-  const url = config("openai_url");
-  const model = config("openai_model");
-  return getResponseStream(messages, url, model, apiKey);
+  return getResponseStream(messages, "chat");
 }
 
 export async function getOpenAiVisionChatResponse(messages: Message[],) {
-  const apiKey = getApiKey("vision_openai_apikey");
-  const url = config("vision_openai_url");
-  const model = config("vision_openai_model");
-
-  const stream = await getResponseStream(messages, url, model, apiKey);
+  const stream = await getResponseStream(messages, "vision");
   const sreader = await stream.getReader();
 
   let combined = "";

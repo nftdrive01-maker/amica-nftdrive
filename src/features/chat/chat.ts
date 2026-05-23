@@ -1,4 +1,4 @@
-import { Queue } from "typescript-collections";
+﻿import { Queue } from "typescript-collections";
 import { Message, Role, Screenplay, Talk, textsToScreenplay } from "./messages";
 import { Viewer } from "@/features/vrmViewer/viewer";
 import { Alert } from "@/features/alert/alert";
@@ -23,6 +23,7 @@ import {
 import { getKoboldAiChatResponseStream } from "./koboldAiChat";
 import { getReasoingEngineChatResponseStream } from "./reasoiningEngineChat";
 import { fetchInjectedContext } from "@/lib/injectionClient";
+import type { InjectionInterceptResponse } from "@/types/injection";
 
 import { rvc } from "@/features/rvc/rvc";
 import { coquiLocal } from "@/features/coquiLocal/coquiLocal";
@@ -46,6 +47,15 @@ import { isCharacterIdle, characterIdleTime, resetIdleTimer } from "@/utils/isId
 import { getOpenRouterChatResponseStream } from './openRouterChat';
 import { handleUserInput } from '../externalAPI/externalAPI';
 import { loadVRMAnimation } from '@/lib/VRMAnimation/loadVRMAnimation';
+import { sessionManager } from '@/lib/sessionManager';
+
+function generateHistoryId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `hist_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 type Speak = {
   audioBuffer: ArrayBuffer | null;
@@ -116,7 +126,7 @@ function summarizeChronicleMainContent(content: string, maxLen = 180): string {
 
 function buildTtsSafeReactionText(text: string, maxLen = 120): string {
   const normalized = text
-    .replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust)\]\s*/gi, "")
+    .replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, "")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -126,6 +136,14 @@ function buildTtsSafeReactionText(text: string, maxLen = 120): string {
   }
 
   return `${normalized.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
+
+function stripRoleDecorators(text: string): string {
+  return text
+    .replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export class Chat {
@@ -187,6 +205,7 @@ export class Chat {
   public setChatLog?: (messageLog: Message[]) => void;
   public setUserMessage?: (message: string) => void;
   public setAssistantMessage?: (message: string) => void;
+  public setAssistantDbResult?: (dbResult?: Message["dbResult"]) => void;
   public setShownMessage?: (role: Role) => void;
   public setChatProcessing?: (processing: boolean) => void;
   public setChatSpeaking?: (speaking: boolean) => void;
@@ -207,8 +226,18 @@ export class Chat {
   public speakJobs: Queue<Speak>;
 
   private currentAssistantMessage: string;
+  private currentAssistantDbResult?: Message["dbResult"];
+  private currentAssistantMcpInfo?: Message["mcpInfo"];
+  private currentAssistantHistoryId?: string;
+  private currentAssistantDomainId?: string;
+  private currentAssistantCreatedAt?: number;
   private currentUserMessage: string;
+  private currentUserHistoryId?: string;
+  private currentUserDomainId?: string;
+  private currentUserCreatedAt?: number;
   private thoughtMessage: string;
+  private pendingDbResult?: Message["dbResult"];
+  private pendingMcpInfo?: Message["mcpInfo"];
   private pendingChronicleDecoratedBlock: string;
   private speakingNow: boolean;
 
@@ -232,8 +261,18 @@ export class Chat {
     this.speakJobs = new Queue<Speak>();
 
     this.currentAssistantMessage = "";
+    this.currentAssistantDbResult = undefined;
+    this.currentAssistantMcpInfo = undefined;
+    this.currentAssistantHistoryId = undefined;
+    this.currentAssistantDomainId = undefined;
+    this.currentAssistantCreatedAt = undefined;
     this.currentUserMessage = "";
+    this.currentUserHistoryId = undefined;
+    this.currentUserDomainId = undefined;
+    this.currentUserCreatedAt = undefined;
     this.thoughtMessage = "";
+    this.pendingDbResult = undefined;
+    this.pendingMcpInfo = undefined;
     this.pendingChronicleDecoratedBlock = "";
     this.speakingNow = false;
 
@@ -282,6 +321,73 @@ export class Chat {
     return `[neutral] CHRONICLEの取得に失敗しました${reason}。接続先やタイムアウト設定を確認しつつ、必要なら再実行します。`;
   }
 
+  private getLatestDbConversationContext(): { previousUserText: string; summary?: string } | null {
+    for (let index = this.messageList.length - 1; index >= 0; index--) {
+      const message = this.messageList[index];
+      if (message.role !== "assistant" || !message.dbResult) {
+        continue;
+      }
+
+      for (let prevIndex = index - 1; prevIndex >= 0; prevIndex--) {
+        const previousMessage = this.messageList[prevIndex];
+        if (previousMessage.role !== "user") {
+          continue;
+        }
+
+        const previousUserText = stripRoleDecorators(previousMessage.content || "");
+        if (!previousUserText) {
+          break;
+        }
+
+        return {
+          previousUserText,
+          summary: message.dbResult.summary,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private shouldCarryDbSearchContext(userText: string, previousUserText: string): boolean {
+    const currentText = stripRoleDecorators(userText);
+    const priorText = stripRoleDecorators(previousUserText);
+
+    if (!currentText || !priorText) {
+      return false;
+    }
+
+    if (!/(物件|部屋|賃貸|不動産)/i.test(priorText)) {
+      return false;
+    }
+
+    if (/(物件|部屋|賃貸|不動産|顧客|契約|テーブル|カラム|スキーマ|SQL|DB|データベース)/i.test(currentText)) {
+      return false;
+    }
+
+    return /(検索|探して|絞|条件|一覧|表示|見せて|件数|市|区|町|村|駅|沿線|ペット|家賃|築|間取り|広さ|駐車場)/i.test(currentText);
+  }
+
+  private buildInjectionUserText(userText: string, hasChronicleMarker: boolean): string {
+    const normalizedText = stripRoleDecorators(userText);
+    const latestDbContext = this.getLatestDbConversationContext();
+
+    let effectiveText = normalizedText;
+    if (latestDbContext && this.shouldCarryDbSearchContext(normalizedText, latestDbContext.previousUserText)) {
+      const contextParts = [
+        "これは前回の表示結果の要約ではなく、新しいDB再検索依頼です。前回の表示内容だけで答えず、必ずDBへ再問い合わせしてください。",
+        `検索対象: ${latestDbContext.previousUserText}`,
+      ];
+
+      contextParts.push(`追加条件: ${normalizedText}`);
+      effectiveText = contextParts.join("\n");
+    }
+
+    return hasChronicleMarker
+      ? `${CHRONICLE_TRIGGER_MARKER} ${effectiveText}`
+      : effectiveText;
+  }
+
   public initialize(
     amicaLife: AmicaLife,
     viewer: Viewer,
@@ -289,6 +395,7 @@ export class Chat {
     setChatLog: (messageLog: Message[]) => void,
     setUserMessage: (message: string) => void,
     setAssistantMessage: (message: string) => void,
+    setAssistantDbResult: (dbResult?: Message["dbResult"]) => void,
     setThoughtMessage: (message: string) => void,
     setShownMessage: (role: Role) => void,
     setChatProcessing: (processing: boolean) => void,
@@ -300,6 +407,7 @@ export class Chat {
     this.setChatLog = setChatLog;
     this.setUserMessage = setUserMessage;
     this.setAssistantMessage = setAssistantMessage;
+    this.setAssistantDbResult = setAssistantDbResult;
     this.setShownMessage = setShownMessage;
     this.setThoughtMessage = setThoughtMessage;
     this.setChatProcessing = setChatProcessing;
@@ -318,9 +426,18 @@ export class Chat {
   public setMessageList(messages: Message[]) {
     this.messageList = messages;
     this.currentAssistantMessage = "";
+    this.currentAssistantDbResult = undefined;
+    this.currentAssistantMcpInfo = undefined;
+    this.currentAssistantHistoryId = undefined;
+    this.currentAssistantDomainId = undefined;
+    this.currentAssistantCreatedAt = undefined;
     this.currentUserMessage = "";
+    this.currentUserHistoryId = undefined;
+    this.currentUserDomainId = undefined;
+    this.currentUserCreatedAt = undefined;
     this.setChatLog!(this.messageList!);
     this.setAssistantMessage!(this.currentAssistantMessage);
+    this.setAssistantDbResult?.(undefined);
     this.setUserMessage!(this.currentAssistantMessage);
     this.currentStreamIdx++;
   }
@@ -516,6 +633,12 @@ export class Chat {
     // TODO: currentUser & Assistant message should be contain the message with emotion in it
 
     if (role === "user") {
+      if (this.currentUserMessage === "") {
+        this.currentUserHistoryId = generateHistoryId();
+        this.currentUserCreatedAt = Date.now();
+        this.currentUserDomainId = this.currentUserDomainId || "default";
+      }
+
       // add space if there is already a partial message
       if (this.currentUserMessage !== "") {
         this.currentUserMessage += " ";
@@ -528,59 +651,135 @@ export class Chat {
         this.messageList!.push({
           role: "assistant",
           content: this.currentAssistantMessage,
+          dbResult: this.currentAssistantDbResult,
+          mcpInfo: this.currentAssistantMcpInfo,
+          historyId: this.currentAssistantHistoryId,
+          domainId: this.currentAssistantDomainId,
+          createdAt: this.currentAssistantCreatedAt,
         });
 
         this.currentAssistantMessage = "";
+        this.currentAssistantDbResult = undefined;
+        this.currentAssistantMcpInfo = undefined;
+        this.currentAssistantHistoryId = undefined;
+        this.currentAssistantDomainId = undefined;
+        this.currentAssistantCreatedAt = undefined;
+        this.setAssistantDbResult?.(undefined);
       }
 
       this.setChatLog!([
         ...this.messageList!,
-        { role: "user", content: this.currentUserMessage },
+        {
+          role: "user",
+          content: this.currentUserMessage,
+          historyId: this.currentUserHistoryId,
+          domainId: this.currentUserDomainId,
+          createdAt: this.currentUserCreatedAt,
+        },
       ]);
     }
 
     if (role === "assistant") {
+      if (this.currentAssistantMessage === "") {
+        this.currentAssistantHistoryId = generateHistoryId();
+        this.currentAssistantCreatedAt = Date.now();
+        this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
+      }
+
+      if (this.currentAssistantMessage === "" && this.pendingDbResult) {
+        this.currentAssistantDbResult = this.pendingDbResult;
+        this.pendingDbResult = undefined;
+      }
+
+      if (this.currentAssistantMessage === "" && this.pendingMcpInfo) {
+        this.currentAssistantMcpInfo = this.pendingMcpInfo;
+        this.pendingMcpInfo = undefined;
+      }
+
       if (
         this.currentAssistantMessage != "" &&
         !this.isAwake() &&
         config("amica_life_enabled") === "true"
       ) {
+        const nextAssistantDbResult = this.pendingDbResult;
         this.messageList!.push({
           role: "assistant",
           content: this.currentAssistantMessage,
+          dbResult: this.currentAssistantDbResult,
+          mcpInfo: this.currentAssistantMcpInfo,
+          historyId: this.currentAssistantHistoryId,
+          domainId: this.currentAssistantDomainId,
+          createdAt: this.currentAssistantCreatedAt,
         });
 
         this.currentAssistantMessage = text;
+        this.currentAssistantDbResult = nextAssistantDbResult;
+        this.currentAssistantMcpInfo = this.pendingMcpInfo;
+        this.currentAssistantHistoryId = generateHistoryId();
+        this.currentAssistantCreatedAt = Date.now();
+        this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
+        this.pendingDbResult = undefined;
+        this.pendingMcpInfo = undefined;
         this.setAssistantMessage!(this.currentAssistantMessage);
+        this.setAssistantDbResult?.(this.currentAssistantDbResult);
       } else if (config("chatbot_backend") === "moshi") {
         if (this.currentAssistantMessage !== "") {
+          const nextAssistantDbResult = this.pendingDbResult;
           this.messageList!.push({
             role: "assistant",
             content: this.currentAssistantMessage,
+            dbResult: this.currentAssistantDbResult,
+            mcpInfo: this.currentAssistantMcpInfo,
+            historyId: this.currentAssistantHistoryId,
+            domainId: this.currentAssistantDomainId,
+            createdAt: this.currentAssistantCreatedAt,
           });
+          this.currentAssistantDbResult = nextAssistantDbResult;
+          this.currentAssistantMcpInfo = this.pendingMcpInfo;
+          this.currentAssistantHistoryId = generateHistoryId();
+          this.currentAssistantCreatedAt = Date.now();
+          this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
+          this.pendingDbResult = undefined;
+          this.pendingMcpInfo = undefined;
         }
         this.currentAssistantMessage = text;
         this.setAssistantMessage!(this.currentAssistantMessage);
+        this.setAssistantDbResult?.(this.currentAssistantDbResult);
         this.setUserMessage!("");
 
       } else {
         this.currentAssistantMessage += text;
         this.setUserMessage!("");
         this.setAssistantMessage!(this.currentAssistantMessage);
+        this.setAssistantDbResult?.(this.currentAssistantDbResult);
       }
 
       if (this.currentUserMessage !== "") {
         this.messageList!.push({
           role: "user",
           content: this.currentUserMessage,
+          historyId: this.currentUserHistoryId,
+          domainId: this.currentUserDomainId,
+          createdAt: this.currentUserCreatedAt,
         });
 
         this.currentUserMessage = "";
+        this.currentUserHistoryId = undefined;
+        this.currentUserDomainId = undefined;
+        this.currentUserCreatedAt = undefined;
       }
 
       this.setChatLog!([
         ...this.messageList!,
-        { role: "assistant", content: this.currentAssistantMessage },
+        {
+          role: "assistant",
+          content: this.currentAssistantMessage,
+          dbResult: this.currentAssistantDbResult,
+          mcpInfo: this.currentAssistantMcpInfo,
+          historyId: this.currentAssistantHistoryId,
+          domainId: this.currentAssistantDomainId,
+          createdAt: this.currentAssistantCreatedAt,
+        },
       ]);
     }
 
@@ -625,6 +824,7 @@ export class Chat {
     }
 
     message = normalizedMessage;
+    this.currentUserDomainId = domainId || this.currentUserDomainId || "default";
 
     console.time("performance_interrupting");
     console.debug("interrupting...");
@@ -651,9 +851,7 @@ export class Chat {
 
     // Fetch injected context from injection-tool (fail-open)
     const userTextForModel = amicaLife ? message : this.currentUserMessage;
-    const userTextForInjection = hasChronicleMarker
-      ? `${CHRONICLE_TRIGGER_MARKER} ${userTextForModel}`
-      : userTextForModel;
+    const userTextForInjection = this.buildInjectionUserText(userTextForModel, hasChronicleMarker);
     const effectiveDomainId = domainId || undefined;
 
     console.debug('[CHRONICLE] request', {
@@ -664,7 +862,8 @@ export class Chat {
 
     const injected = await fetchInjectedContext(
       userTextForInjection,
-      effectiveDomainId
+      effectiveDomainId,
+      sessionManager.getSessionId() || undefined
     );
 
     if (injected.metadata) {
@@ -741,6 +940,14 @@ export class Chat {
       return;
     }
 
+    this.pendingDbResult = injected.dbResult;
+    this.pendingMcpInfo = injected.metadata?.mcpUsed
+      ? {
+          used: true,
+          serverId: injected.metadata?.mcpServerId,
+          toolName: injected.metadata?.mcpToolName,
+        }
+      : undefined;
     this.pendingChronicleDecoratedBlock = this.buildChronicleDecoratedBlock(injected.chronicle);
 
     // Compose system prompt with injected context

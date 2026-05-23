@@ -1,9 +1,32 @@
 export type Role = "assistant" | "system" | "user";
 
+export type ChatDbResult = {
+  title?: string;
+  sourceName?: string;
+  toolName?: string;
+  summary?: string;
+  queryText?: string;
+  sortLabel?: string;
+  totalCount?: number;
+  previewColumns?: string[];
+  previewRows?: Array<Record<string, string | number | boolean | null>>;
+};
+
+export type ChatMcpInfo = {
+  used?: boolean;
+  serverId?: string;
+  toolName?: string;
+};
+
 // ChatGPT API
 export type Message = {
   role: Role;
   content: string; // this can be a string or like {type: "image", image_url: {url: "https://example.com/image.jpg"} } but the typing for it sucks
+  dbResult?: ChatDbResult;
+  mcpInfo?: ChatMcpInfo;
+  historyId?: string;
+  domainId?: string;
+  createdAt?: number;
 };
 
 const talkStyles = [

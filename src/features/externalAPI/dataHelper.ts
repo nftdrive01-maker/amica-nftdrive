@@ -1,7 +1,7 @@
 import isDev from "@/utils/isDev";
 import { readFile, writeFile } from "./utils/apiHelper";
 import path from "path";
-import { config } from "@/utils/config";
+import { config, isSecretConfigKey } from "@/utils/config";
 
 // Define file paths
 export const configFilePath = path.resolve(
@@ -21,12 +21,22 @@ export const chatLogsFilePath = path.resolve(
 );
 
 // GET Request Handlers
-export const handleGetConfig = () => readFile(configFilePath);
+export const handleGetConfig = () => {
+  const storedConfig = readFile(configFilePath);
+  return Object.fromEntries(
+    Object.entries(storedConfig).map(([key, value]) => [
+      key,
+      isSecretConfigKey(key) ? "" : value,
+    ]),
+  );
+};
 export const handleGetSubconscious = () => readFile(subconsciousFilePath);
 export const handleGetLogs = () => readFile(logsFilePath);
 export const handleGetUserInputMessages = () =>
   readFile(userInputMessagesFilePath);
 export const handleGetChatLogs = () => readFile(chatLogsFilePath);
+
+export const readServerConfig = () => readFile(configFilePath);
 
 // POST Request Handlers
 export const handlePostConfig = (body: any) => updateConfig(body);
