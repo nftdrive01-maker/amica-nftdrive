@@ -1733,7 +1733,7 @@ export default function MessageInput({
             <div className="mb-4">
               <h3 id="domain-access-dialog-title" className="text-lg font-bold text-slate-900">ドメイン認証</h3>
               <p className="mt-1 text-sm text-slate-600">
-                {domainAccessDialogDomain.label} に入るにはユーザー名とパスワードが必要です。
+                {domainAccessDialogDomain.label} にアクセスするにはユーザー名とパスワードが必要です。
               </p>
             </div>
 

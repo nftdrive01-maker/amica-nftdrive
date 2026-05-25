@@ -102,6 +102,7 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
           <div className="ark-core-lensflare" />
           <div className="ark-core-aura" />
           <div className="ark-core-prism-band" />
+          <div className="ark-core-center-glow" />
           <div className="ark-core-orb" />
         </div>
       </div>
@@ -154,7 +155,7 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
           place-items: center;
           transform-style: preserve-3d;
           filter: drop-shadow(var(--ark-shadow-x) var(--ark-shadow-y) 32px rgba(115, 226, 255, 0.42));
-          animation: ark-core-float 5.8s ease-in-out infinite;
+          animation: ark-core-float 6.2s ease-in-out infinite;
         }
 
         [data-speaking="true"] .ark-core-wrap {
@@ -296,6 +297,42 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
           animation-duration: 1.8s;
         }
 
+        .ark-core-center-glow {
+          position: absolute;
+          width: 28%;
+          aspect-ratio: 1;
+          border-radius: 50%;
+          background:
+            radial-gradient(circle, rgba(255,255,255,1) 0 18%, rgba(130,239,255,0.94) 30%, rgba(255,173,220,0.66) 54%, rgba(162,189,255,0.28) 68%, transparent 84%);
+          filter: blur(10px);
+          opacity: 0.92;
+          box-shadow:
+            0 0 28px rgba(255,255,255,0.96),
+            0 0 64px rgba(88,220,255,0.78),
+            0 0 96px rgba(255,153,213,0.5);
+          mix-blend-mode: screen;
+          animation: ark-core-center-glow 3.2s ease-in-out infinite;
+        }
+
+        [data-speaking="true"] .ark-core-center-glow {
+          opacity: 1;
+          filter: blur(8px) brightness(1.08);
+          box-shadow:
+            0 0 36px rgba(255,255,255,1),
+            0 0 84px rgba(88,220,255,0.9),
+            0 0 122px rgba(255,153,213,0.68);
+          animation-duration: 0.9s;
+        }
+
+        [data-speaking="true"][data-speech-phase="open"] .ark-core-center-glow {
+          transform: scale(1.12);
+        }
+
+        [data-speaking="true"][data-speech-phase="closed"] .ark-core-center-glow {
+          transform: scale(0.94);
+          opacity: 0.88;
+        }
+
         .ark-core-orb {
           position: absolute;
           width: 56%;
@@ -318,7 +355,7 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
             inset -18px -22px 42px rgba(54,129,204,0.28);
           backdrop-filter: blur(6px);
           transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-          animation: ark-core-orb-float 4.6s ease-in-out infinite;
+          animation: none;
         }
 
         [data-speaking="true"] .ark-core-orb {
@@ -390,13 +427,8 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
         }
 
         @keyframes ark-core-float {
-          0%, 100% { transform: translateY(-1.5vh) rotateX(0deg) rotateY(-2deg); }
-          50% { transform: translateY(-6.8vh) rotateX(1deg) rotateY(2deg); }
-        }
-
-        @keyframes ark-core-orb-float {
-          0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(-1.2vh) scale(1.015); }
+          0%, 100% { transform: translateY(-2vh) rotateX(0deg) rotateY(-2deg); }
+          50% { transform: translateY(-5vh) rotateX(1deg) rotateY(2deg); }
         }
 
         @keyframes ark-core-rise {
@@ -444,6 +476,11 @@ export function DefaultArkCoreAvatar({ visible, speaking }: DefaultArkCoreAvatar
         @keyframes ark-core-pulse {
           0%, 100% { scale: 0.92; opacity: 0.66; }
           50% { scale: 1.16; opacity: 0.98; }
+        }
+
+        @keyframes ark-core-center-glow {
+          0%, 100% { transform: scale(0.92); opacity: 0.84; }
+          50% { transform: scale(1.08); opacity: 1; }
         }
 
         @media (max-width: 720px) {

@@ -8,6 +8,7 @@ import { handleConfig } from '@/features/externalAPI/externalAPI';
 import { ApiResponse, generateSessionId, sendError } from '@/features/externalAPI/utils/apiHelper';
 import { transcribeVoice } from '@/features/externalAPI/processors/voiceProcessor';
 import { processImage } from '@/features/externalAPI/processors/imageProcessor';
+import { requireProtectedApiRoute } from '@/lib/apiSecurity';
 
 import formidable from 'formidable';
 import fs from "fs";
@@ -21,6 +22,13 @@ export const config = {
 
 // Main API handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
+  if (!requireProtectedApiRoute(req, res, {
+    publicEnvVar: 'AMICA_LEGACY_EXTERNAL_API_PUBLIC',
+    routeName: 'legacy media API',
+  })) {
+    return;
+  }
+
   // Syncing config to be accessible from server side
   await handleConfig("fetch");
 

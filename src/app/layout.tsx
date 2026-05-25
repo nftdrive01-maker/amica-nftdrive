@@ -1,6 +1,14 @@
 export const metadata = {
   title: 'Ark-i',
   description: 'Ark-i AI Concierge',
+  icons: {
+    icon: [
+      { url: '/icon/icon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon/icon-16x16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon/icon-152x152.png', sizes: '152x152', type: 'image/png' }],
+    shortcut: ['/icon/icon-32x32.png'],
+  },
 }
 
 export default function RootLayout({

@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { IconButton } from "./iconButton";
+import { stripDisplayControlTags } from "@/utils/stringProcessing";
 
 export const ThoughtText = ({ message }: { message: string }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   
-  // Remove emotion tags
-  const cleanMessage = message.replace(/\[(.*?)\]/g, "");
+  const cleanMessage = stripDisplayControlTags(message);
   
   useEffect(() => {
     scrollRef.current?.scrollIntoView({

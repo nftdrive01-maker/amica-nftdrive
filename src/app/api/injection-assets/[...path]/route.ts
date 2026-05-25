@@ -30,7 +30,8 @@ async function proxyAsset(
 
   const headers = new Headers();
   req.headers.forEach((value, key) => {
-    if (key.toLowerCase() !== 'host') {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey !== 'host' && lowerKey !== 'accept-encoding') {
       headers.set(key, value);
     }
   });
@@ -43,7 +44,7 @@ async function proxyAsset(
 
     const responseHeaders = new Headers();
     upstream.headers.forEach((value, key) => {
-      if (!['transfer-encoding', 'connection'].includes(key.toLowerCase())) {
+      if (!['transfer-encoding', 'connection', 'content-encoding', 'content-length'].includes(key.toLowerCase())) {
         responseHeaders.set(key, value);
       }
     });

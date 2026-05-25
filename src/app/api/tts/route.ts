@@ -1,6 +1,21 @@
 import { NextRequest } from "next/server";
+import { requireProtectedAppRoute } from '@/lib/apiSecurity';
+import { requirePublicRateLimit } from '@/lib/publicRateLimit';
 
 export async function POST(req: NextRequest) {
+  const protectionResponse = requireProtectedAppRoute(req, {
+    publicEnvVar: 'AMICA_TTS_PROXY_PUBLIC',
+    routeName: 'tts proxy',
+  });
+  if (protectionResponse) {
+    return protectionResponse;
+  }
+
+  const rateLimitResponse = await requirePublicRateLimit(req, 'tts proxy', 'tts');
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const body = await req.json();
     const { text, model_id, style } = body;

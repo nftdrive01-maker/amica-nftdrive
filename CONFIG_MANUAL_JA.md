@@ -1,4 +1,4 @@
-# Amica / injection-tool 設定解説マニュアル
+# フロントアプリ / injection-tool 設定解説マニュアル
 
 最終更新: 2026-05-03
 
@@ -8,7 +8,7 @@
 
 ## 1. 設定の保存先
 
-- Amica（ブラウザ）
+- フロントアプリ（ブラウザ）
   - `localStorage` の `chatvrm_*` キー
   - 初期値は `src/utils/config.ts` の `defaults`
 - injection-tool（サーバー）
@@ -23,7 +23,7 @@
 
 ---
 
-## 2. Amica 側の重要設定
+## 2. フロントアプリ側の重要設定
 
 ## 2.1 Injection連携
 
@@ -79,7 +79,7 @@
 ## 3.2 CORS/公開
 
 - `NEXT_PUBLIC_AMICA_ORIGIN`
-  - Amicaのオリジン（CORS）
+  - フロントアプリのオリジン（CORS）
 - `NEXT_PUBLIC_INJECTION_TOOL_ORIGIN`
   - 外部公開時の正規オリジン（アセットURL生成に使用）
 
@@ -103,7 +103,7 @@
 - ベースSystem Prompt / Context
 - 追加ナレッジ紐付け
 - MCPサーバー紐付け
-- ドメイン別SBV2設定
+- ドメイン別TTS設定
   - `stylebertvits2ModelId`
   - `stylebertvits2Style`
 
@@ -146,10 +146,10 @@
 
 ## 6. トラブル時の設定確認順
 
-1. Amica `.env.local`（Injection URL / Enabled）
+1. フロントアプリ `.env.local`（Injection URL / Enabled）
 2. injection-tool `.env.local`（CORS / 認証）
 3. 公開管理の上限値
-4. SBV2 URLとモデル一覧取得
+4. TTS URLとモデル一覧取得
 5. MCPサーバー接続テスト
 6. 発音辞書設定（WanaKana ON/OFF）と変換ルール優先度
 

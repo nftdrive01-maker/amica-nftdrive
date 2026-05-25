@@ -16,6 +16,27 @@ const INTERNAL_URL =
 
 const INTERNAL_ORIGIN = INTERNAL_URL.replace(/\/$/, '');
 
+const ALLOWED_ROUTE_PATTERNS: Array<{
+  method: string;
+  pattern: RegExp;
+}> = [
+  { method: 'GET', pattern: /^health$/ },
+  { method: 'POST', pattern: /^intercept$/ },
+  { method: 'GET', pattern: /^public\/domains$/ },
+  { method: 'GET', pattern: /^public\/pronunciations$/ },
+  { method: 'POST', pattern: /^public\/chat-history$/ },
+  { method: 'POST', pattern: /^public\/domain-access\/login$/ },
+  { method: 'GET', pattern: /^public\/sessions$/ },
+  { method: 'POST', pattern: /^public\/sessions$/ },
+];
+
+function isAllowedProxyRoute(method: string, pathSegments: string[]): boolean {
+  const normalizedPath = pathSegments.join('/');
+  return ALLOWED_ROUTE_PATTERNS.some(
+    (route) => route.method === method.toUpperCase() && route.pattern.test(normalizedPath)
+  );
+}
+
 function rewriteAssetUrlForBff(url: unknown): string {
   if (typeof url !== 'string' || url.trim() === '') {
     return '';
@@ -72,6 +93,13 @@ async function proxyRequest(
   req: NextRequest,
   params: { path: string[] }
 ): Promise<NextResponse> {
+  if (!isAllowedProxyRoute(req.method, params.path)) {
+    return NextResponse.json(
+      { error: 'この injection 経路は公開されていません', code: 'INJECTION_ROUTE_NOT_ALLOWED' },
+      { status: 404 }
+    );
+  }
+
   const targetUrl = buildTargetUrl(
     params.path,
     req.nextUrl.searchParams.toString()
@@ -92,7 +120,7 @@ async function proxyRequest(
     const upstream = await fetch(targetUrl, {
       method: req.method,
       headers,
-      body: body ? Buffer.from(body) : undefined,
+      body,
     });
 
     const contentType = upstream.headers.get('content-type') || '';

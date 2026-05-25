@@ -5,6 +5,17 @@ export const CONFIG_UPDATED_EVENT = "chatvrm:config-updated";
 const secretConfigKeys = new Set([
   "openai_apikey",
   "vision_openai_apikey",
+  "openrouter_apikey",
+  "openai_whisper_apikey",
+  "openai_tts_apikey",
+  "elevenlabs_apikey",
+  "coqui_apikey",
+  "x_api_key",
+  "x_api_secret",
+  "x_access_token",
+  "x_access_secret",
+  "x_bearer_token",
+  "telegram_bot_token",
 ]);
 
 export function isSecretConfigKey(key: string): boolean {

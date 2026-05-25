@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { normalizeThemeColor } from "@/utils/domainTheme";
+import { stripDisplayControlTags } from "@/utils/stringProcessing";
 import { IconButton } from "./iconButton";
 import { useTranslation } from "react-i18next";
 import { ChatDbResult, ChatMcpInfo, Message } from "@/features/chat/messages";
@@ -39,7 +40,7 @@ function getMessageDbResult(message: Message): ChatDbResult | null {
         return message.dbResult;
     }
 
-    const normalizedMessage = stripEmotionTags(message.content);
+    const normalizedMessage = stripDisplayControlTags(message.content);
     return splitDbResultBlock(normalizedMessage).dbResult;
 }
 
@@ -64,6 +65,7 @@ function getDbResultSignature(dbResult?: ChatDbResult | null): string {
 export const ChatModeText = ({ messages }: { messages: Message[] }) => {
     const chatScrollRef = useRef<HTMLDivElement>(null);
     const chatViewportRef = useRef<HTMLDivElement>(null);
+    const hasMessages = messages.length > 0;
     const resolvedLatestDbResult = [...messages]
         .reverse()
         .map((message) => (message.role === "assistant" ? getMessageDbResult(message) : null))
@@ -148,31 +150,33 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                     aria-label="Close search canvas backdrop"
                 />
             )}
-            <div className="fixed bottom-0 z-10 mb-40 flex h-[90%] w-full flex-col justify-end lg:left-[33.333vw] lg:w-[33.333vw] lg:mb-20">
-                <div className="pointer-events-none absolute inset-y-3 left-1 right-1 z-0 rounded-[28px] bg-slate-950/22 backdrop-blur-[3px] lg:inset-y-0 lg:left-0 lg:right-0 lg:rounded-none" />
-                <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.015)_7%,rgba(15,23,42,0.2)_16%,rgba(15,23,42,0.34)_28%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.34)_72%,rgba(15,23,42,0.2)_84%,rgba(255,255,255,0.015)_93%,rgba(255,255,255,0.04)_100%)]" />
-                <div ref={chatViewportRef} className="scroll-hidden relative z-10 h-full w-full overflow-y-auto flex flex-col-reverse">
+            {hasMessages && (
+                <div className="fixed bottom-0 z-10 mb-40 flex max-h-[90%] w-full flex-col justify-end lg:left-[33.333vw] lg:w-[33.333vw] lg:mb-20">
+                    <div className="pointer-events-none absolute inset-y-3 left-1 right-1 z-0 rounded-none bg-slate-950/22 backdrop-blur-[3px] lg:inset-y-0 lg:left-0 lg:right-0" />
+                    <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.2)_0%,rgba(15,23,42,0.24)_10%,rgba(15,23,42,0.32)_22%,rgba(15,23,42,0.4)_34%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.4)_66%,rgba(15,23,42,0.32)_78%,rgba(15,23,42,0.24)_90%,rgba(15,23,42,0.2)_100%)]" />
+                    <div ref={chatViewportRef} className="scroll-hidden relative z-10 max-h-full w-full overflow-y-auto flex flex-col-reverse">
 
-                    <div className="mx-auto flex w-full max-w-full flex-col gap-3 px-8 pb-6 pt-4 md:px-16 lg:px-8 lg:pb-10 xl:px-10">
-                        {messages.map((msg, i) => {
-                            return (
-                                <div key={i} ref={messages.length - 1 === i ? chatScrollRef : null}>
-                                    <Chat
-                                        role={msg.role}
-                                        message={(msg.content as string)}
-                                        dbResult={msg.dbResult}
-                                        mcpInfo={msg.mcpInfo}
-                                        num={i}
-                                        onOpenResult={openOverlay}
-                                        activeResultSignature={isOverlayOpen ? overlayResultSignature : ""}
-                                    />
-                                </div>
-                            );
-                        })}
+                        <div className="mx-auto flex w-full max-w-full flex-col gap-3 px-4 pb-6 pt-4 md:px-6 lg:px-5 lg:pb-10 xl:px-6">
+                            {messages.map((msg, i) => {
+                                return (
+                                    <div key={i} ref={messages.length - 1 === i ? chatScrollRef : null}>
+                                        <Chat
+                                            role={msg.role}
+                                            message={(msg.content as string)}
+                                            dbResult={msg.dbResult}
+                                            mcpInfo={msg.mcpInfo}
+                                            num={i}
+                                            onOpenResult={openOverlay}
+                                            activeResultSignature={isOverlayOpen ? overlayResultSignature : ""}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
-            </div>
-            {showScrollToBottom && (
+            )}
+            {hasMessages && showScrollToBottom && (
                 <div className="pointer-events-none fixed bottom-32 left-1/2 z-[60] -translate-x-1/2 lg:bottom-16">
                     <button
                         type="button"
@@ -185,26 +189,26 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
             )}
             <div className="pointer-events-none fixed inset-y-0 right-0 z-40 flex items-end justify-end sm:items-stretch">
                 <div className={clsx(
-                    "pointer-events-auto mb-28 mr-0 flex h-[88%] w-[min(92vw,700px)] flex-col overflow-hidden rounded-l-[28px] border border-white/18 border-r-0 bg-slate-900/22 shadow-[0_22px_64px_rgba(15,23,42,0.2)] backdrop-blur-2xl transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:w-[34vw] lg:rounded-none lg:rounded-l-[22px] xl:w-[32vw]",
+                    "pointer-events-auto mb-28 mr-0 flex h-[88%] w-[min(92vw,700px)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-900/80 shadow-lg backdrop-blur-md transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:w-[34vw] xl:w-[32vw]",
                     isOverlayOpen && overlayResult ? "translate-x-0 opacity-100" : "translate-x-full opacity-0",
                 )}>
-                    <div className="flex items-start justify-between border-b border-white/12 bg-white/[0.08] px-5 py-4 text-white backdrop-blur-xl">
+                    <div className="flex items-start justify-between border-b border-slate-700/60 bg-slate-800/70 px-3 py-2 text-slate-200">
                         <div className="min-w-0">
-                            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/55">
+                            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                                 Search Workspace
                             </div>
-                            <div className="mt-1 truncate text-base font-semibold text-white/92">
+                            <div className="mt-1 truncate text-sm font-semibold text-white/95">
                                 検索結果
                             </div>
                             {(overlayResult?.sourceName || overlayResult?.toolName) && (
-                                <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-white/65">
+                                <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-medium text-white/75">
                                     {overlayResult.sourceName && (
-                                        <span className="rounded-full border border-white/18 bg-white/[0.1] px-2.5 py-1 text-white/78 backdrop-blur-md">
+                                        <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-slate-700/70 text-slate-100">
                                             {overlayResult.sourceName}
                                         </span>
                                     )}
                                     {overlayResult.toolName && (
-                                        <span className="rounded-full border border-white/18 bg-white/[0.1] px-2.5 py-1 text-white/78 backdrop-blur-md">
+                                        <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-slate-700/70 text-slate-100">
                                             {overlayResult.toolName}
                                         </span>
                                     )}
@@ -213,7 +217,7 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                         </div>
                         <button
                             type="button"
-                            className="ml-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/18 bg-white/[0.1] text-lg font-medium text-white/72 backdrop-blur-md transition hover:bg-white/[0.16] hover:text-white"
+                            className="ml-4 inline-flex h-7 w-7 items-center justify-center rounded text-current/90 transition hover:bg-black/10 hover:text-white"
                             onClick={() => setIsOverlayOpen(false)}
                             aria-label="Close search canvas"
                         >
@@ -221,7 +225,7 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                         </button>
                     </div>
 
-                    <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(15,23,42,0.08)_100%)] px-3 py-3 backdrop-blur-xl lg:px-4 lg:py-4">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 lg:px-3 lg:py-3">
                         {overlayResult && <DbResultPanel dbResult={overlayResult} embedded />}
                     </div>
                 </div>
@@ -252,10 +256,6 @@ function splitChronicleBlock(text: string): {
     };
 }
 
-function stripEmotionTags(text: string): string {
-    return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, '');
-}
-
 function Chat({
     role,
     message,
@@ -275,7 +275,7 @@ function Chat({
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const accentColor = normalizeThemeColor(config('theme_color'));
-    const normalizedMessage = stripEmotionTags(message);
+    const normalizedMessage = stripDisplayControlTags(message);
     const { dbResult: dbResultFromText, plainMessage: afterDbMessage } = splitDbResultBlock(normalizedMessage);
     const dbResult = dbResultProp || dbResultFromText;
     const dbResultSignature = getDbResultSignature(dbResult);
@@ -291,10 +291,10 @@ function Chat({
 
     return (
         <div className={clsx(
-            'mx-auto w-full max-w-4xl',
-            role === "assistant" ? "pr-2 sm:pr-6 lg:pr-10" : "ml-auto pl-8 sm:pl-16 lg:pl-24",
+            'mx-auto w-full max-w-3xl',
+            role === "assistant" ? "px-2 sm:px-4 lg:px-6" : "ml-auto px-2 pl-5 sm:px-4 sm:pl-10 lg:px-6 lg:pl-14",
         )}>
-            <div className="px-3 py-2 sm:px-4">
+            <div className="px-3 py-2 sm:px-5 lg:px-6">
                     <div className={clsx(
                         "flex items-center gap-2 pb-1 text-white font-bold tracking-wider",
                         role === "user" && "justify-end",

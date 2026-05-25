@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { normalizeThemeColor } from "@/utils/domainTheme";
+import { stripDisplayControlTags } from "@/utils/stringProcessing";
 import { ChatDbResult } from "@/features/chat/messages";
 import { DbResultPanel } from "./dbResultPanel";
 
@@ -187,14 +188,10 @@ function splitChronicleBlock(text: string): {
   };
 }
 
-function stripEmotionTags(text: string): string {
-  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, "");
-}
-
 export const AssistantText = ({ message, dbResult: dbResultProp }: { message: string; dbResult?: ChatDbResult }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const accentColor = normalizeThemeColor(config('theme_color'));
-  const normalizedMessage = stripEmotionTags(message);
+  const normalizedMessage = stripDisplayControlTags(message);
   const { dbResult: dbResultFromText, plainMessage: afterDbMessage } = splitDbResultBlock(normalizedMessage);
   const dbResult = dbResultProp || dbResultFromText;
   const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(afterDbMessage);
@@ -209,9 +206,9 @@ export const AssistantText = ({ message, dbResult: dbResultProp }: { message: st
   return (
     <div className="fixed bottom-0 left-0 mb-28 w-full">
       <div className={clsx("mx-auto w-full px-4 md:px-10", dbResult ? "max-w-5xl" : "max-w-4xl")}>
-        <div className="relative overflow-hidden rounded-[28px] shadow-[0_22px_64px_rgba(15,23,42,0.2)]">
+        <div className="relative overflow-hidden rounded-none shadow-[0_22px_64px_rgba(15,23,42,0.2)]">
           <div className="pointer-events-none absolute inset-y-0 left-0 right-0 bg-slate-950/22 backdrop-blur-[3px]" />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_0%,rgba(255,255,255,0.015)_7%,rgba(15,23,42,0.2)_16%,rgba(15,23,42,0.34)_28%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.34)_72%,rgba(15,23,42,0.2)_84%,rgba(255,255,255,0.015)_93%,rgba(255,255,255,0.04)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.2)_0%,rgba(15,23,42,0.24)_10%,rgba(15,23,42,0.32)_22%,rgba(15,23,42,0.4)_34%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.4)_66%,rgba(15,23,42,0.32)_78%,rgba(15,23,42,0.24)_90%,rgba(15,23,42,0.2)_100%)]" />
           <div className="relative z-10 px-6 py-5 md:px-8">
             <div className="flex items-center gap-2 pb-1 text-white font-bold tracking-wider">
               <span className="inline-flex items-center text-[24px] font-bold leading-none text-pink-400 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[24px]" style={accentColor ? { color: accentColor } : undefined}>

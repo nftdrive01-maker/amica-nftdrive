@@ -139,19 +139,19 @@ export function HistoryPanel({
         aria-label="Close history panel backdrop"
       />
       <div className="pointer-events-none fixed inset-y-0 right-0 z-40 flex items-end justify-end sm:items-stretch">
-        <div className="pointer-events-auto mb-28 mr-0 flex h-[88%] w-[min(92vw,700px)] flex-col overflow-hidden rounded-l-[28px] border border-white/18 border-r-0 bg-slate-900/22 shadow-[0_22px_64px_rgba(15,23,42,0.2)] backdrop-blur-2xl transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:w-[34vw] lg:rounded-none lg:rounded-l-[22px] xl:w-[32vw] translate-x-0 opacity-100">
-          <div className="flex items-start justify-between border-b border-white/12 bg-white/[0.08] px-5 py-4 text-white backdrop-blur-xl">
+        <div className="pointer-events-auto mb-28 mr-0 flex h-[88%] w-[min(92vw,700px)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-900/80 shadow-lg backdrop-blur-md transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:w-[34vw] xl:w-[32vw] translate-x-0 opacity-100">
+          <div className="flex items-start justify-between border-b border-slate-700/60 bg-slate-800/70 px-3 py-2 text-slate-200">
             <div className="min-w-0">
-              <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/55">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                 History Search
               </div>
-              <div className="mt-1 truncate text-base font-semibold text-white/92">
+              <div className="mt-1 truncate text-sm font-semibold text-white/95">
                 履歴検索
               </div>
             </div>
             <button
               type="button"
-              className="ml-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/18 bg-white/[0.1] text-lg font-medium text-white/72 backdrop-blur-md transition hover:bg-white/[0.16] hover:text-white"
+              className="ml-4 inline-flex h-7 w-7 items-center justify-center rounded text-current/90 transition hover:bg-black/10 hover:text-white"
               onClick={onClose}
               aria-label="Close history panel"
             >
@@ -159,16 +159,16 @@ export function HistoryPanel({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(15,23,42,0.08)_100%)] px-4 py-4 text-white backdrop-blur-xl lg:px-5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-white lg:px-3">
             <div className="space-y-4">
-              <div className="rounded-2xl border border-white/12 bg-white/[0.06] p-4 backdrop-blur-md">
+              <div className="space-y-3 rounded-md border border-slate-700/50 bg-slate-950/25 px-3 py-3">
                 <div className="grid gap-3">
                   <label className="grid gap-1 text-sm text-white/86">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">Domain</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Domain</span>
                     <select
                       value={selectedDomainId}
                       onChange={(event) => setSelectedDomainId(event.target.value)}
-                      className="rounded-xl border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none"
+                      className="rounded border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
                     >
                       <option value="">すべてのドメイン</option>
                       {domainIds.map((domainId) => (
@@ -179,33 +179,33 @@ export function HistoryPanel({
 
                   <div className="grid grid-cols-2 gap-3">
                     <label className="grid gap-1 text-sm text-white/86">
-                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">From</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">From</span>
                       <input
                         type="date"
                         value={fromDate}
                         onChange={(event) => setFromDate(event.target.value)}
-                        className="rounded-xl border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none"
+                        className="rounded border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
                       />
                     </label>
                     <label className="grid gap-1 text-sm text-white/86">
-                      <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">To</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">To</span>
                       <input
                         type="date"
                         value={toDate}
                         onChange={(event) => setToDate(event.target.value)}
-                        className="rounded-xl border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none"
+                        className="rounded border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none"
                       />
                     </label>
                   </div>
 
                   <label className="grid gap-1 text-sm text-white/86">
-                    <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/55">Query</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Query</span>
                     <input
                       type="text"
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
                       placeholder="本文やツール名で検索"
-                      className="rounded-xl border border-white/12 bg-slate-950/35 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35"
+                      className="rounded border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
                     />
                   </label>
                 </div>
@@ -214,7 +214,7 @@ export function HistoryPanel({
                   <button
                     type="button"
                     onClick={handleSearch}
-                    className="rounded-full bg-white/[0.14] px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/[0.2]"
+                    className="rounded px-3 py-1.5 text-sm font-semibold text-slate-100 bg-slate-700/70 hover:bg-slate-700"
                   >
                     検索する
                   </button>
@@ -222,14 +222,14 @@ export function HistoryPanel({
                     type="button"
                     onClick={handleDeleteDomain}
                     disabled={!selectedDomainId}
-                    className="rounded-full bg-rose-400/16 px-4 py-2 text-sm font-semibold text-rose-100 ring-1 ring-rose-300/20 transition hover:bg-rose-400/22 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded px-3 py-1.5 text-sm font-semibold text-rose-100 bg-rose-500/20 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ドメイン履歴を削除
                   </button>
                   <button
                     type="button"
                     onClick={handleDeleteAll}
-                    className="rounded-full bg-rose-500/22 px-4 py-2 text-sm font-semibold text-white ring-1 ring-rose-300/20 transition hover:bg-rose-500/28"
+                    className="rounded px-3 py-1.5 text-sm font-semibold text-white bg-rose-600/30 hover:bg-rose-600/40"
                   >
                     全履歴を削除
                   </button>
@@ -237,27 +237,27 @@ export function HistoryPanel({
               </div>
 
               {errorMessage && (
-                <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-100">
                   {errorMessage}
                 </div>
               )}
 
               {!searched && (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-5 text-sm text-white/70">
+                <div className="rounded-md border border-slate-700/50 bg-slate-950/25 px-3 py-4 text-sm text-white/70">
                   条件を指定して検索すると履歴を表示します。
                 </div>
               )}
 
               {searched && (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-md">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="rounded-md border border-slate-700/50 bg-slate-950/25 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/50 pb-3">
                     <div className="text-sm text-white/75">検索結果 {loading ? "..." : `${totalCount} 件`}</div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         disabled={!hasResults}
                         onClick={() => chatHistoryStore.downloadJson(results, `${downloadFileBase}.json`)}
-                        className="rounded-full bg-white/[0.12] px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/[0.18] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded px-2.5 py-1 text-xs font-semibold text-slate-100 bg-slate-700/70 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         JSON出力
                       </button>
@@ -265,7 +265,7 @@ export function HistoryPanel({
                         type="button"
                         disabled={!hasResults}
                         onClick={() => chatHistoryStore.downloadCsv(results, `${downloadFileBase}.csv`)}
-                        className="rounded-full bg-white/[0.12] px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/[0.18] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded px-2.5 py-1 text-xs font-semibold text-slate-100 bg-slate-700/70 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         CSV出力
                       </button>
@@ -278,13 +278,13 @@ export function HistoryPanel({
                     )}
 
                     {results.map((entry) => (
-                      <div key={entry.historyId} className="rounded-2xl border border-white/10 bg-slate-950/18 p-4 backdrop-blur-md">
+                      <div key={entry.historyId} className="rounded-md border border-slate-700/50 bg-slate-950/35 p-3">
                         <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
-                          <span className="rounded-full bg-white/[0.08] px-2 py-1 ring-1 ring-white/10">{entry.domainId}</span>
-                          <span className="rounded-full bg-white/[0.08] px-2 py-1 ring-1 ring-white/10">{entry.role}</span>
+                          <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-slate-700/70 text-slate-100">{entry.domainId}</span>
+                          <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-slate-700/70 text-slate-100">{entry.role}</span>
                           <span>{formatDateTime(entry.createdAt)}</span>
                           {entry.mcpInfo?.used && (
-                            <span className="rounded-full bg-emerald-400/12 px-2 py-1 text-emerald-200 ring-1 ring-emerald-300/20">
+                            <span className="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight bg-emerald-500/20 text-emerald-200">
                               +MCP{entry.mcpInfo.toolName ? ` ${entry.mcpInfo.toolName}` : ""}
                             </span>
                           )}

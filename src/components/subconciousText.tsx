@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { useTranslation } from "react-i18next";
 import { IconBrain } from '@tabler/icons-react';
+import { stripDisplayControlTags } from "@/utils/stringProcessing";
 
 export const SubconciousText = ({ messages }: { messages: TimestampedPrompt[] }) => {
     const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -21,7 +22,7 @@ export const SubconciousText = ({ messages }: { messages: TimestampedPrompt[] })
                         <div key={i} ref={messages.length - 1 === i ? chatScrollRef : null}>
                             <Chat
                                 timeStamp={msg.timestamp}
-                                prompt={msg.prompt.replace(/\[(.*?)\]/g, "")}
+                                prompt={stripDisplayControlTags(msg.prompt)}
                                 num={i}
                             />
                         </div>

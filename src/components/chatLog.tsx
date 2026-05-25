@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/20/solid';
 import { config } from "@/utils/config";
 import { normalizeThemeColor } from "@/utils/domainTheme";
+import { stripDisplayControlTags } from "@/utils/stringProcessing";
 import { ChatContext } from "@/features/chat/chatContext";
 import { saveAs } from 'file-saver';
 import { ChatDbResult } from '@/features/chat/messages';
@@ -351,10 +352,6 @@ function splitChronicleBlock(text: string): {
   };
 }
 
-function stripEmotionTags(text: string): string {
-  return text.replace(/\[(neutral|happy|sad|angry|fear|surprised|disgust|relaxed|shy|jealous|bored|serious|suspicious|victory|sleep|love)\]\s*/gi, '');
-}
-
 function Chat({
   role,
   message,
@@ -370,7 +367,7 @@ function Chat({
 }) {
   const { t } = useTranslation();
   const accentColor = normalizeThemeColor(config('theme_color'));
-  const normalizedMessage = stripEmotionTags(message);
+  const normalizedMessage = stripDisplayControlTags(message);
   const { dbResult: dbResultFromText, plainMessage: afterDbMessage } = splitDbResultBlock(normalizedMessage);
   const dbResult = dbResultProp || dbResultFromText;
   const { chipLabel, chronicleContent, plainMessage } = splitChronicleBlock(afterDbMessage);

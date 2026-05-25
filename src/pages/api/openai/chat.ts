@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { readServerConfig } from "@/features/externalAPI/dataHelper";
+import { requireProtectedApiRoute } from '@/lib/apiSecurity';
 
 type ConfigRecord = Record<string, string | undefined>;
 
@@ -19,6 +20,13 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireProtectedApiRoute(req, res, {
+    publicEnvVar: 'AMICA_OPENAI_PROXY_PUBLIC',
+    routeName: 'OpenAI proxy',
+  })) {
+    return;
+  }
+
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).end(`Method ${req.method} Not Allowed`);
@@ -72,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       model,
       messages,
       stream: true,
-      max_tokens: 200,
+      max_tokens: 400,
     }),
   });
 

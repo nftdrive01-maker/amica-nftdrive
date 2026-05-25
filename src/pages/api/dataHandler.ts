@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { writeFile } from '@/features/externalAPI/utils/apiHelper';
 import { chatLogsFilePath, handleGetChatLogs, handleGetConfig, handleGetLogs, handleGetSubconscious, handleGetUserInputMessages, handlePostChatLogs, handlePostConfig, handlePostLogs, handlePostSubconscious, handlePostUserInputMessages, logsFilePath, subconsciousFilePath, userInputMessagesFilePath } from '@/features/externalAPI/dataHelper';
+import { requireProtectedApiRoute } from '@/lib/apiSecurity';
 
 // Clear data on startup
 writeFile(subconsciousFilePath, []);
@@ -9,6 +10,13 @@ writeFile(userInputMessagesFilePath, []);
 writeFile(chatLogsFilePath, []);
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!requireProtectedApiRoute(req, res, {
+    publicEnvVar: 'AMICA_DATA_HANDLER_PUBLIC',
+    routeName: 'dataHandler',
+  })) {
+    return;
+  }
+
   const { type } = req.query;
 
   if (!['config', 'subconscious', 'logs', 'userInputMessages', 'chatLogs'].includes(type as string)) {

@@ -19,3 +19,14 @@ export function cleanFromWakeWord(text: string, wakeWord: string) {
 export function cleanFromPunctuation(text: string) {
   return text.toLowerCase().replace(/[^\w\s\']|_/g, "").replace(/\s+/g, " ");
 }
+
+export function stripDisplayControlTags(text: string) {
+  if (!text) {
+    return text;
+  }
+
+  return text.replace(
+    /(^|[\s\r\n。！？.!?])\[(?:[a-z][a-z\s_-]{0,30})\](?=$|[\s\r\n])/gi,
+    "$1"
+  );
+}

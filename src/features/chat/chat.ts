@@ -249,6 +249,16 @@ export class Chat {
 
   private eventSource: EventSource | null = null
 
+  private isRateLimitedError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return message.includes('RATE_LIMITED:');
+  }
+
+  private toRateLimitedMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return message.replace(/^Browser fetch error:\s*/, '').replace(/^RATE_LIMITED:\s*/, '').trim();
+  }
+
   constructor() {
     this.initialized = false;
 
@@ -1082,7 +1092,11 @@ export class Chat {
     } catch (e: any) {
       const errMsg = e.toString();
       console.error(errMsg);
-      this.alert?.error("Failed to get chat response", errMsg);
+      if (this.isRateLimitedError(e)) {
+        this.alert?.warning("レート制限中", this.toRateLimitedMessage(e));
+      } else {
+        this.alert?.error("Failed to get chat response", errMsg);
+      }
       return errMsg;
     }
 
@@ -1300,7 +1314,11 @@ export class Chat {
       }
     } catch (e: any) {
       console.error(e.toString());
-      this.alert?.error("Failed to get TTS response", e.toString());
+      if (this.isRateLimitedError(e)) {
+        this.alert?.warning("レート制限中", this.toRateLimitedMessage(e));
+      } else {
+        this.alert?.error("Failed to get TTS response", e.toString());
+      }
     }
 
     return null;

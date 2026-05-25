@@ -14,6 +14,8 @@ import {
   Bars3Icon,
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   ClockIcon,
   CloudArrowDownIcon,
   CodeBracketSquareIcon,
@@ -75,6 +77,7 @@ import { WaitingScreen } from "@/components/waitingScreen";
 import { acquireSession, sessionManager } from "@/lib/sessionManager";
 import { fetchPublicDomainOptions, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
 import { getPersistentUserId } from "@/lib/userIdentity";
+import { clearDomainAccessSession } from '@/lib/domainAccessSession';
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -197,6 +200,8 @@ export default function Home() {
   const [selectedDomainLabel, setSelectedDomainLabel] = useState(() => config('injection_default_domain_label') || 'デフォルト');
   const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
   const [domainDisplayVersion, setDomainDisplayVersion] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isConnectionIndicatorExpanded, setIsConnectionIndicatorExpanded] = useState(true);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -249,6 +254,34 @@ export default function Home() {
     }
   })();
 
+  const checkImageAvailable = (url: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (!url) {
+        resolve(false);
+        return;
+      }
+
+      const img = new Image();
+      const timeoutId = window.setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        resolve(false);
+      }, 7000);
+
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      };
+
+      img.onerror = () => {
+        clearTimeout(timeoutId);
+        resolve(false);
+      };
+
+      img.src = url;
+    });
+  };
+
 
   useEffect(() => {
     if (!domainAuthDialogOpen) {
@@ -270,19 +303,39 @@ export default function Home() {
 
     setShowArbiusIntroduction(config("show_arbius_introduction") === 'true');
 
-    const bgColor = config("bg_color");
-    const bgUrl = config("bg_url");
+    const applyInitialBackground = async () => {
+      const bgColor = config("bg_color");
+      const bgUrl = config("bg_url");
 
-    if (bgColor !== '') {
-      document.body.style.backgroundImage = '';
-      document.body.style.backgroundColor = bgColor;
-    } else if (bgUrl) {
+      if (bgColor !== '') {
+        document.body.style.backgroundImage = '';
+        document.body.style.backgroundColor = bgColor;
+        return;
+      }
+
+      if (bgUrl) {
+        const bgOk = await checkImageAvailable(bgUrl);
+        if (bgOk) {
+          document.body.style.backgroundColor = '';
+          document.body.style.backgroundImage = `url(${bgUrl})`;
+          return;
+        }
+
+        await updateConfig('bg_url', '');
+        document.body.style.backgroundColor = '';
+        document.body.style.backgroundImage = '';
+        alert.warning(
+          '背景画像の読み込みに失敗しました',
+          '削除済みまたは到達不能な背景画像設定を解除し、デフォルト背景へフォールバックしました。'
+        );
+        return;
+      }
+
       document.body.style.backgroundColor = '';
-      document.body.style.backgroundImage = `url(${bgUrl})`;
-    } else {
-      document.body.style.backgroundColor = '';
       document.body.style.backgroundImage = '';
-    }
+    };
+
+    void applyInitialBackground();
     // Temp Disable : WebXR
     // if (window.navigator.xr && window.navigator.xr.isSessionSupported) {
     //   let deviceInfo = detectVRHeadset();
@@ -292,7 +345,7 @@ export default function Home() {
     //     setIsVRSupported(supported);
     //   });
     // }
-  }, []);
+  }, [alert, muted]);
 
   useEffect(() => {
     if (viewer && videoRef.current && showStreamWindow) {
@@ -335,7 +388,7 @@ export default function Home() {
   };
 
   const toggleHistory = () => {
-    toggleState(setShowHistory, [setShowChatLog, setShowSubconciousText, setShowChatMode]);
+    toggleState(setShowHistory, [setShowChatLog, setShowSubconciousText]);
   };
 
   const toggleXR = async (immersiveType: XRSessionMode) => {
@@ -427,7 +480,7 @@ export default function Home() {
     if (config("tts_backend") === 'openai') {
       updateConfig("tts_backend", "openai_tts");
     }
-  }, [bot, viewer]);
+  }, [alert, amicaLife, bot, viewer]);
 
   useEffect(() => {
     amicaLife.initialize(
@@ -436,7 +489,7 @@ export default function Home() {
       setSubconciousLogs,
       chatSpeaking,
     );
-  }, [amicaLife, bot, viewer]);
+  }, [amicaLife, bot, chatSpeaking, viewer]);
 
   useEffect(() => {
     handleChatLogs(chatLog);
@@ -531,6 +584,33 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+
+    const applyViewportMode = (matches: boolean) => {
+      setIsMobileViewport(matches);
+      setIsConnectionIndicatorExpanded(!matches);
+    };
+
+    applyViewportMode(mediaQuery.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      applyViewportMode(event.matches);
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -567,6 +647,7 @@ export default function Home() {
         if (result.sessionId) sessionManager.start(result.sessionId, domainId);
         setSessionBlocked(false);
       } else if (result.errorCode === 'DOMAIN_AUTH_REQUIRED') {
+        clearDomainAccessSession(domainId);
         setSessionBlocked(false);
         setDomainAccessPromptNonce((prev) => prev + 1);
       } else {
@@ -611,6 +692,7 @@ export default function Home() {
 
         if (!cancelled) {
           if (attached.errorCode === 'DOMAIN_AUTH_REQUIRED') {
+            clearDomainAccessSession(selectedDomainId);
             setDomainAccessPromptNonce((prev) => prev + 1);
           }
           setSelectedDomainGazeEnabled(nextGazeEnabled);
@@ -732,7 +814,10 @@ export default function Home() {
       />
 
       <div
-        className="fixed left-2 top-2 z-20 max-w-[320px] rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden"
+        className={clsx(
+          "fixed left-2 top-2 z-20 rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden",
+          isMobileViewport ? "max-w-[220px]" : "max-w-[320px]"
+        )}
       >
         {/* ヘッダーバー */}
         <div
@@ -745,16 +830,30 @@ export default function Home() {
         >
           <span
             className={clsx(
-              "inline-block w-1.5 h-1.5 rounded-full",
+              "inline-block h-1.5 w-1.5 rounded-full",
               attachedPackDetails.isReachable
                 ? "bg-emerald-400"
                 : "bg-red-400"
             )}
           />
-          {!attachedPackDetails.isReachable ? "サーバー停止中" : "接続中"}
+          <span className="min-w-0 flex-1 truncate">
+            {!attachedPackDetails.isReachable ? "サーバー停止中" : "接続中"}
+          </span>
+          {isMobileViewport && (
+            <button
+              type="button"
+              className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/90 transition hover:bg-black/10 hover:text-current"
+              onClick={() => setIsConnectionIndicatorExpanded((prev) => !prev)}
+              aria-label={isConnectionIndicatorExpanded ? '接続情報を折りたたむ' : '接続情報を展開する'}
+              aria-expanded={isConnectionIndicatorExpanded}
+            >
+              {isConnectionIndicatorExpanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
         {/* コンテンツ */}
+        {isConnectionIndicatorExpanded && (
         <div className="px-3 py-2 space-y-2">
           <div className="space-y-1 rounded-md border border-slate-700/50 bg-slate-950/25 px-2 py-2">
             <div className="text-[11px] font-semibold text-white/90">
@@ -823,6 +922,7 @@ export default function Home() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* main menu */}

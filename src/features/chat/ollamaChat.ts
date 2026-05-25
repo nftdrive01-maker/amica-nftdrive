@@ -2,6 +2,44 @@ import { Message } from "./messages";
 import { buildPrompt } from "@/utils/buildPrompt";
 import { config } from '@/utils/config';
 
+async function buildOllamaError(res: Response, fallbackLabel: string): Promise<Error> {
+  let retryAfterSeconds = '';
+  let message = `${fallbackLabel} (${res.status})`;
+
+  try {
+    const payload = await res.json().catch(() => null);
+    const payloadMessage = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : '';
+    const payloadRetryAfter = payload?.retryAfterSeconds;
+
+    if (payloadMessage) {
+      message = payloadMessage;
+    }
+
+    if (typeof payloadRetryAfter === 'number' && Number.isFinite(payloadRetryAfter) && payloadRetryAfter > 0) {
+      retryAfterSeconds = String(Math.floor(payloadRetryAfter));
+    }
+  } catch {
+    // ignore json parse failure
+  }
+
+  if (!retryAfterSeconds) {
+    const headerRetryAfter = res.headers.get('Retry-After');
+    if (headerRetryAfter && /^\d+$/.test(headerRetryAfter.trim())) {
+      retryAfterSeconds = headerRetryAfter.trim();
+    }
+  }
+
+  if (res.status === 429) {
+    return new Error(
+      `RATE_LIMITED: レート制限中です。${retryAfterSeconds ? `${retryAfterSeconds}秒ほど待ってから再試行してください。` : '少し待ってから再試行してください。'}`
+    );
+  }
+
+  return new Error(message);
+}
+
 function mergeChunkWithOverlap(
   assembledAssistantText: string,
   messagePiece: string,
@@ -56,7 +94,7 @@ export async function getOllamaChatResponseStream(messages: Message[]) {
 
   const reader = res.body?.getReader();
   if (res.status !== 200 || ! reader) {
-    throw new Error(`Ollama chat error (${res.status})`);
+    throw await buildOllamaError(res, `Ollama chat error (${res.status})`);
   }
 
   const stream = new ReadableStream({
@@ -155,7 +193,7 @@ export async function getOllamaVisionChatResponse(messages: Message[], imageData
   });
 
   if (res.status !== 200) {
-    throw new Error(`Ollama chat error (${res.status})`);
+    throw await buildOllamaError(res, `Ollama chat error (${res.status})`);
   }
 
   const json = await res.json();

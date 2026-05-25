@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 import { config } from "@/utils/config";
 import { handleConfig, handleSubconscious } from "@/features/externalAPI/externalAPI";
+import { requireProtectedApiRoute } from '@/lib/apiSecurity';
 
 import { generateSessionId, sendError, apiLogEntry, ApiResponse } from "@/features/externalAPI/utils/apiHelper";
 import { requestMemory, requestLogs, requestUserInputMessages, requestChatHistory } from "@/features/externalAPI/utils/requestHandler";
@@ -15,6 +16,13 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ApiResponse>
 ) {
+  if (!requireProtectedApiRoute(req, res, {
+    publicEnvVar: 'AMICA_LEGACY_EXTERNAL_API_PUBLIC',
+    routeName: 'legacy Amica API',
+  })) {
+    return;
+  }
+
   // Syncing config to be accessible from server side
   await handleConfig("fetch");
 

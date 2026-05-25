@@ -1,4 +1,4 @@
-# Amica + injection-tool システム全体仕様書 / 設定解説マニュアル
+# フロントアプリ + injection-tool システム全体仕様書 / 設定解説マニュアル
 
 最終更新: 2026-05-03  
 対象構成: `d:\amica` / `d:\injection-tool` / `d:\sbv2\Style-Bert-VITS2` / `d:\mcp-server`
@@ -9,7 +9,7 @@
 
 本書は、以下を1つにまとめた実運用向けドキュメントです。
 
-- システム構成（Amica / injection-tool / TTS / MCP）
+- システム構成（フロントアプリ / injection-tool / TTS / MCP）
 - APIとデータフロー仕様
 - 環境変数と設定項目の意味
 - 起動・監視・障害時対応
@@ -21,16 +21,16 @@
 
 ### 2.1 コンポーネント
 
-1. **Amica**（Next.js, ポート3000想定）
+1. **フロントアプリ**（Next.js, ポート3000想定）
    - 3D UI、チャットUI、LLM/TTS 呼び出し
    - injection-tool 連携（知識注入 / 公開セッション制御）
 
 2. **injection-tool (Ark-i)**（Next.js, ポート4001想定）
    - 管理画面（ドメイン、ナレッジ、MCP、公開管理）
-   - `/api/intercept` で知識をAmicaに注入
+  - `/api/intercept` で知識をフロントアプリに注入
    - `/api/public/sessions` で同時接続制御
 
-3. **Style-Bert-VITS2 (SBV2)**（FastAPI, ポート5000想定）
+3. **TTS**（FastAPI, ポート5000想定）
    - 音声合成 `/voice`
    - モデル一覧 `/models/info`
 
@@ -42,17 +42,17 @@
 
 #### チャット応答
 
-1. ユーザー入力（Amica）
-2. Amica → injection-tool `/api/intercept`
+1. ユーザー入力（フロントアプリ）
+2. フロントアプリ → injection-tool `/api/intercept`
 3. ドメイン/ナレッジ/MCP結果を system prompt に合成
-4. Amica → LLM
+4. フロントアプリ → LLM
 5. 応答表示（URLはリンク表示）
 6. 応答文をTTS前処理（URL除去）
-7. Amica → SBV2（model_id / style 指定）
+7. フロントアプリ → TTS（model_id / style 指定）
 
 #### 同時接続制御（公開管理）
 
-1. Amica起動時に `/api/public/sessions` へ acquire
+1. フロントアプリ起動時に `/api/public/sessions` へ acquire
 2. 満席なら待機画面表示（自動再試行）
 3. 入場後は heartbeat を定期送信
 4. 離脱時は release
@@ -68,7 +68,7 @@
   - `injectedSystemPrompt`
   - `injectedUserContext`
   - `metadata`（domainId, ttl, version, mcpUsed など）
-- **fail-open**: 例外時は空レスポンス返却（Amicaは通常応答を継続）
+- **fail-open**: 例外時は空レスポンス返却（フロントアプリは通常応答を継続）
 
 ## 3.2 MCPルーティング
 
@@ -79,7 +79,7 @@
 ## 3.3 ドメイン別TTSモデル
 
 - ドメイン設定の `stylebertvits2ModelId` / `stylebertvits2Style` を優先
-- 未設定時は Amica グローバル設定へフォールバック
+- 未設定時はフロントアプリのグローバル設定へフォールバック
 - `coquiLocal` と `stylebertvits2` の双方で適用
 
 ## 3.4 URLのUI/TTS挙動
@@ -100,7 +100,7 @@
 - `0` は無制限
 - カウント対象: 同一 injection-tool インスタンスに接続する全クライアント（ローカル/VPNを問わず）
 - TTL:
-  - heartbeat間隔: 20秒（Amica）
+  - heartbeat間隔: 20秒（フロントアプリ）
   - セッションTTL: 60秒（injection-tool）
   - 掃除周期: 30秒（injection-tool）
 
@@ -126,7 +126,7 @@
 
 ### `GET /api/public/domains`
 
-- 用途: Amica側のドメイン選択/資産URL解決
+- 用途: フロントアプリ側のドメイン選択/資産URL解決
 - 認証: 不要
 - 返却: ドメイン一覧 + `defaultDomainId`
 
@@ -183,7 +183,7 @@
 - `INJECTION_PUBLIC_SETTINGS_CONFIG`（既定: `./data/public-settings.json`）
   - 公開管理設定（`maxConcurrentSessions`）
 
-## 5.2 Amica
+## 5.2 フロントアプリ
 
 - ブラウザ `localStorage`
   - `chatvrm_*` キーで設定保存
@@ -194,7 +194,7 @@
 
 ## 6. 設定解説（環境変数）
 
-## 6.1 Amica 側（代表項目）
+## 6.1 フロントアプリ側（代表項目）
 
 ### Injection連携
 
@@ -254,20 +254,20 @@
 
 ## 7. 起動手順（ローカル）
 
-1. SBV2 起動
+1. TTS 起動
    - `d:\sbv2\Style-Bert-VITS2\Server.bat`
 2. MCPサーバー起動（使用時）
    - `d:\mcp-server\Start-Server.bat`
 3. injection-tool 起動
    - `cd d:\injection-tool && npm run dev`
-4. Amica 起動
+4. フロントアプリ起動
    - `cd d:\amica && npm run dev`
 
 確認URL:
 
-- Amica: `http://localhost:3000`
+- フロントアプリ: `http://localhost:3000`
 - injection-tool: `http://localhost:4001`
-- SBV2: `http://127.0.0.1:5000/models/info`
+- TTS: `http://127.0.0.1:5000/models/info`
 
 ---
 
@@ -276,13 +276,13 @@
 - CORS許可元 (`NEXT_PUBLIC_AMICA_ORIGIN`) を実URLに合わせる
 - injection-tool の公開URLが変わる場合は `NEXT_PUBLIC_INJECTION_TOOL_ORIGIN` を設定
 - 同時接続数は「公開管理」で調整
-- 入口で制限し、SBV2/LLMの過負荷を回避
+- 入口で制限し、TTS/LLMの過負荷を回避
 
 ---
 
 ## 9. 障害時チェックリスト
 
-1. **Amicaのみ正常で注入されない**
+1. **フロントアプリのみ正常で注入されない**
    - `NEXT_PUBLIC_INJECTION_TOOL_ENABLED=true` を確認
    - `/api/health` 疎通確認
 
@@ -308,14 +308,14 @@
 - 本番変更は以下順序:
   1. injection-tool設定更新
   2. 接続数監視
-  3. 問題なければ Amicaへ反映
+  3. 問題なければフロントアプリへ反映
 
 ---
 
 ## 11. 参考ファイル
 
-- Amica設定: `d:\amica\src\utils\config.ts`
-- 同時接続制御(Amica): `d:\amica\src\lib\sessionManager.ts`
+- フロントアプリ設定: `d:\amica\src\utils\config.ts`
+- 同時接続制御(フロントアプリ): `d:\amica\src\lib\sessionManager.ts`
 - 待機画面: `d:\amica\src\components\waitingScreen.tsx`
 - 注入API: `d:\injection-tool\src\app\api\intercept\route.ts`
 - 公開セッションAPI: `d:\injection-tool\src\app\api\public\sessions\route.ts`

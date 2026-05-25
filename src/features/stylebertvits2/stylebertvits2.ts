@@ -2,6 +2,47 @@ import { config } from "@/utils/config";
 import { normalizeTtsPronunciation } from '@/lib/ttsPronunciation';
 import { getDomainVoiceConfig } from '@/lib/injectionClient';
 
+async function buildStyleBertVits2Error(res: Response): Promise<Error> {
+  let message = `Style-Bert-VITS2 API Error (${res.status})`;
+  let retryAfterSeconds = '';
+
+  try {
+    const payload = await res.json().catch(() => null);
+    const payloadMessage = typeof payload?.error === 'string' && payload.error.trim()
+      ? payload.error.trim()
+      : '';
+    const payloadRetryAfter = payload?.retryAfterSeconds;
+
+    if (payloadMessage) {
+      message = payloadMessage;
+    }
+
+    if (typeof payloadRetryAfter === 'number' && Number.isFinite(payloadRetryAfter) && payloadRetryAfter > 0) {
+      retryAfterSeconds = String(Math.floor(payloadRetryAfter));
+    }
+  } catch {
+    const text = await res.text().catch(() => '');
+    if (text.trim()) {
+      message = `Style-Bert-VITS2 API Error (${res.status}): ${text.trim()}`;
+    }
+  }
+
+  if (!retryAfterSeconds) {
+    const headerRetryAfter = res.headers.get('Retry-After');
+    if (headerRetryAfter && /^\d+$/.test(headerRetryAfter.trim())) {
+      retryAfterSeconds = headerRetryAfter.trim();
+    }
+  }
+
+  if (res.status === 429) {
+    return new Error(
+      `RATE_LIMITED: 音声生成のレート制限中です。${retryAfterSeconds ? `${retryAfterSeconds}秒ほど待ってから再試行してください。` : '少し待ってから再試行してください。'}`
+    );
+  }
+
+  return new Error(message);
+}
+
 export async function stylebertvits2(message: string, domainId?: string) {
   try {
     const spokenText = await normalizeTtsPronunciation(message, domainId);
@@ -29,8 +70,7 @@ export async function stylebertvits2(message: string, domainId?: string) {
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Style-Bert-VITS2 API Error (${res.status}): ${text}`);
+      throw await buildStyleBertVits2Error(res);
     }
 
     const arrayBuffer = await res.arrayBuffer();
