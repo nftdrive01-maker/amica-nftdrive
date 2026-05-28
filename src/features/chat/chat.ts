@@ -22,7 +22,7 @@ import {
 } from "./ollamaChat";
 import { getKoboldAiChatResponseStream } from "./koboldAiChat";
 import { getReasoingEngineChatResponseStream } from "./reasoiningEngineChat";
-import { fetchInjectedContext } from "@/lib/injectionClient";
+import { fetchInjectedContext, getDomainVoiceConfig } from "@/lib/injectionClient";
 import type { InjectionInterceptResponse } from "@/types/injection";
 
 import { rvc } from "@/features/rvc/rvc";
@@ -1260,9 +1260,11 @@ export class Chat {
     }
 
     const rvcEnabled = config("rvc_enabled") === "true";
+    const domainVoiceConfig = domainId ? await getDomainVoiceConfig(domainId) : {};
+    const effectiveTtsBackend = domainVoiceConfig.ttsBackend?.trim() || config("tts_backend");
 
     try {
-      switch (config("tts_backend")) {
+      switch (effectiveTtsBackend) {
         case "none": {
           return null;
         }

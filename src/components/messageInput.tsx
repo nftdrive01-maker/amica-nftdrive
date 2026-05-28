@@ -250,6 +250,7 @@ export default function MessageInput({
         imageAvatarIdleUrl: '',
         imageAvatarTalkUrl: '',
         imageAvatarTalkIntervalMs: 180,
+        ttsBackend: '',
         ttsMuted: undefined,
         stylebertvits2ModelId: '',
         stylebertvits2Style: '',
@@ -285,6 +286,7 @@ export default function MessageInput({
             typeof item.imageAvatarTalkIntervalMs === 'number' && item.imageAvatarTalkIntervalMs > 0
               ? item.imageAvatarTalkIntervalMs
               : 180,
+          ttsBackend: String(item.ttsBackend ?? '').trim(),
           ttsMuted: typeof item.ttsMuted === 'boolean' ? item.ttsMuted : undefined,
           stylebertvits2ModelId: String(item.stylebertvits2ModelId ?? '').trim(),
           stylebertvits2Style: String(item.stylebertvits2Style ?? '').trim(),

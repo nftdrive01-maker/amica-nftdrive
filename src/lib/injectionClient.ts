@@ -24,6 +24,7 @@ export type PublicDomainOption = {
   imageAvatarIdleUrl?: string;
   imageAvatarTalkUrl?: string;
   imageAvatarTalkIntervalMs?: number;
+  ttsBackend?: string;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
   ttsMuted?: boolean;
@@ -585,6 +586,10 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
               typeof domain.imageAvatarTalkUrl === 'string' ? domain.imageAvatarTalkUrl.trim() : '',
             imageAvatarTalkIntervalMs:
               typeof domain.imageAvatarTalkIntervalMs === 'number' ? domain.imageAvatarTalkIntervalMs : undefined,
+            ttsBackend:
+              typeof domain.ttsBackend === 'string'
+                ? domain.ttsBackend.trim()
+                : '',
             stylebertvits2ModelId:
               typeof domain.stylebertvits2ModelId === 'string'
                 ? domain.stylebertvits2ModelId.trim()
@@ -663,7 +668,7 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
 }
 
 // ドメイン音声設定のメモリキャッシュ（ページリロードまで有効）
-let _domainVoiceCache: Map<string, { stylebertvits2ModelId?: string; stylebertvits2Style?: string }> | null = null;
+let _domainVoiceCache: Map<string, { ttsBackend?: string; stylebertvits2ModelId?: string; stylebertvits2Style?: string }> | null = null;
 let _domainVoiceFetchPromise: Promise<void> | null = null;
 
 async function ensureDomainVoiceCache(): Promise<void> {
@@ -675,6 +680,7 @@ async function ensureDomainVoiceCache(): Promise<void> {
     _domainVoiceCache = new Map();
     for (const domain of domains) {
       _domainVoiceCache.set(domain.id, {
+        ttsBackend: domain.ttsBackend || '',
         stylebertvits2ModelId: domain.stylebertvits2ModelId || '',
         stylebertvits2Style: domain.stylebertvits2Style || '',
       });
@@ -690,6 +696,7 @@ async function ensureDomainVoiceCache(): Promise<void> {
  * stylebertvits2ModelId / stylebertvits2Style が空の場合はグローバル設定にフォールバック
  */
 export async function getDomainVoiceConfig(domainId: string): Promise<{
+  ttsBackend?: string;
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
 }> {
