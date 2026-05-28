@@ -35,6 +35,9 @@ export type PublicDomainOption = {
   gazeDebugUiEnabled?: boolean;
 };
 
+let _publicDomainOptionsCache: PublicDomainOption[] | null = null;
+let _publicDomainOptionsFetchPromise: Promise<PublicDomainOption[]> | null = null;
+
 function buildDomainAccessHeaders(domainId?: string): Record<string, string> {
   const normalizedDomainId = String(domainId || '').trim();
   if (!normalizedDomainId) {
@@ -169,12 +172,21 @@ export async function syncServerChatHistory(entries: ChatHistoryEntry[]): Promis
       groupedEntries.set(domainId, current);
     }
 
+    const domainOptions = await getCachedPublicDomainOptions();
+    const domainOptionMap = new Map(domainOptions.map((domain) => [domain.id, domain]));
+
     for (const [domainId, grouped] of groupedEntries.entries()) {
+      const domainAccessHeaders = buildDomainAccessHeaders(domainId);
+      const accessControlEnabled = domainOptionMap.get(domainId)?.accessControlEnabled === true;
+      if (accessControlEnabled && !domainAccessHeaders['x-domain-access-token']) {
+        continue;
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...buildDomainAccessHeaders(domainId),
+          ...domainAccessHeaders,
         },
         body: JSON.stringify({ entries: grouped }),
       });
@@ -186,6 +198,27 @@ export async function syncServerChatHistory(entries: ChatHistoryEntry[]): Promis
   } catch (error) {
     console.warn('Chat history sync failed:', error);
   }
+}
+
+async function getCachedPublicDomainOptions(): Promise<PublicDomainOption[]> {
+  if (_publicDomainOptionsCache) {
+    return _publicDomainOptionsCache;
+  }
+
+  if (_publicDomainOptionsFetchPromise) {
+    return _publicDomainOptionsFetchPromise;
+  }
+
+  _publicDomainOptionsFetchPromise = fetchPublicDomainOptions()
+    .then((domains) => {
+      _publicDomainOptionsCache = domains;
+      return domains;
+    })
+    .finally(() => {
+      _publicDomainOptionsFetchPromise = null;
+    });
+
+  return _publicDomainOptionsFetchPromise;
 }
 
 /**
@@ -610,7 +643,9 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
           }
         }
 
-        return Array.from(unique.values());
+        const domains = Array.from(unique.values());
+        _publicDomainOptionsCache = domains;
+        return domains;
       } catch {
         clearTimeout(timeoutId);
         if (attempt < maxAttempts - 1) {

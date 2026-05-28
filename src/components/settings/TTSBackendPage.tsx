@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { BasicPage, FormRow, Link, getLinkFromPage } from './common';
-import { updateConfig } from "@/utils/config";
+import { isManagedConfigKey, updateConfig } from "@/utils/config";
 
 const ttsEngines = [
   {key: "none",       label: "None"},
@@ -35,18 +35,25 @@ export function TTSBackendPage({
   setBreadcrumbs: (breadcrumbs: Link[]) => void;
 }) {
   const { t } = useTranslation();
+  const ttsBackendManaged = isManagedConfigKey('tts_backend');
 
   return (
     <BasicPage
       title={t("TTS Backend")}
       description={t("TTS_Backend_desc", "Select the TTS backend to use. By default this is set to our TTS server. Elevenlabs is a paid service with the best voice, but it is free for non-commercial use. SpeechT5 is an open source TTS model. OpenAI TTS is an open source TTS model. Local XTTS is our local TTS endpoint (XTTS based). Piper is a free TTS model. Coqui Local is a free TTS model.")}
     >
+      {ttsBackendManaged && (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          この設定は環境変数で固定されているため、クライアント側から変更できません。
+        </p>
+      )}
       <ul role="list" className="divide-y divide-gray-100 max-w-xs">
         <li className="py-4">
           <FormRow label={t("TTS Backend")}>
             <select
               className="mt-2 block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
               value={ttsBackend}
+              disabled={ttsBackendManaged}
               onChange={(event: React.ChangeEvent<any>) => {
                 setTTSBackend(event.target.value);
                 updateConfig("tts_backend", event.target.value);

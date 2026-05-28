@@ -8,10 +8,17 @@ declare namespace NodeJS {
     // StyleBertVits2 Configuration
     NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL?: string;
     NEXT_PUBLIC_SHOW_CHAT_MODE?: string;
+    NEXT_PUBLIC_SHOW_SETTINGS_UI?: string;
+    NEXT_PUBLIC_ASYNC_TTS_MODE?: string;
 
 
     // Existing environment variables (preserving for type safety)
     NEXT_PUBLIC_CHATBOT_BACKEND?: string;
+    NEXT_PUBLIC_MANAGED_CONFIG_KEYS?: string;
+    NEXT_PUBLIC_HIDDEN_SETTINGS_PAGES?: string;
+    NEXT_PUBLIC_VISION_BACKEND?: string;
+    NEXT_PUBLIC_VISION_OLLAMA_URL?: string;
+    NEXT_PUBLIC_VISION_OLLAMA_MODEL?: string;
     NEXT_PUBLIC_OPENAI_APIKEY?: string;
     NEXT_PUBLIC_OPENAI_URL?: string;
     NEXT_PUBLIC_OPENAI_MODEL?: string;
@@ -19,6 +26,7 @@ declare namespace NodeJS {
     NEXT_PUBLIC_LLAMACPP_STOP_SEQUENCE?: string;
     NEXT_PUBLIC_OLLAMA_URL?: string;
     NEXT_PUBLIC_OLLAMA_MODEL?: string;
+    VISION_OLLAMA_URL?: string;
     NEXT_PUBLIC_KOBOLDAI_URL?: string;
     NEXT_PUBLIC_KOBOLDAI_USE_EXTRA?: string;
     NEXT_PUBLIC_KOBOLDAI_STOP_SEQUENCE?: string;

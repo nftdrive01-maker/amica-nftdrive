@@ -2,6 +2,25 @@ import { NextRequest } from "next/server";
 import { requireProtectedAppRoute } from '@/lib/apiSecurity';
 import { requirePublicRateLimit } from '@/lib/publicRateLimit';
 
+function getStyleBertVits2BaseUrlCandidates() {
+  const candidates = [
+    process.env.STYLEBERTVITS2_URL,
+    process.env.NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL,
+    "http://host.docker.internal:5000",
+    "http://127.0.0.1:5000",
+  ].filter((value): value is string => Boolean(value));
+
+  const expandedCandidates = candidates.flatMap((value) => {
+    if (value.includes("sbv2:")) {
+      return [value, value.replace(/\/\/sbv2(?=[:/]|$)/, "//host.docker.internal")];
+    }
+
+    return [value];
+  });
+
+  return [...new Set(expandedCandidates)].map((value) => value.replace(/\/$/, ""));
+}
+
 export async function POST(req: NextRequest) {
   const protectionResponse = requireProtectedAppRoute(req, {
     publicEnvVar: 'AMICA_TTS_PROXY_PUBLIC',
@@ -24,12 +43,6 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: "Text is required" }), { status: 400 });
     }
 
-    const styleBertVits2BaseUrl =
-      process.env.STYLEBERTVITS2_URL ||
-      process.env.NEXT_PUBLIC_STYLEBERTVITS2_SERVER_URL ||
-      "http://127.0.0.1:5000";
-    const normalizedStyleBertVits2BaseUrl = styleBertVits2BaseUrl.replace(/\/$/, "");
-    
     // クエリパラメータの構築
     const params = new URLSearchParams({
       text: text,
@@ -37,15 +50,30 @@ export async function POST(req: NextRequest) {
       style: style || "Neutral"
     });
 
-    const apiUrl = `${normalizedStyleBertVits2BaseUrl}/voice?${params.toString()}`;
+    const candidates = getStyleBertVits2BaseUrlCandidates();
+    let res: Response | null = null;
+    let lastError: unknown = null;
 
-    const res = await fetch(apiUrl, {
-      method: "GET", // Style-Bert-VITS2の仕様に準拠 (GETリクエストで音声データを取得)
-    });
+    for (const baseUrl of candidates) {
+      try {
+        const apiUrl = `${baseUrl}/voice?${params.toString()}`;
+        res = await fetch(apiUrl, {
+          method: "GET", // Style-Bert-VITS2の仕様に準拠 (GETリクエストで音声データを取得)
+        });
 
-    if (!res.ok) {
-       console.error(`Style-Bert-VITS2 Error: ${res.statusText}`);
-       return new Response(`Style-Bert-VITS2 proxy error: ${res.statusText}`, { status: res.status });
+        if (res.ok) {
+          break;
+        }
+
+        console.error(`Style-Bert-VITS2 Error from ${baseUrl}: ${res.status} ${res.statusText}`);
+        return new Response(`Style-Bert-VITS2 proxy error: ${res.statusText}`, { status: res.status });
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (!res || !res.ok) {
+      throw lastError ?? new Error("Style-Bert-VITS2 server unreachable");
     }
 
     // wavデータをブラウザに返却

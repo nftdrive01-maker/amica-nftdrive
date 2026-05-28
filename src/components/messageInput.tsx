@@ -3,6 +3,7 @@ ort.env.wasm.wasmPaths = '/_next/static/chunks/'
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
+import { useTranslation } from "react-i18next";
 import { useMicVAD } from "@ricky0123/vad-react"
 import { IconButton } from "./iconButton";
 import { useTranscriber } from "@/hooks/useTranscriber";
@@ -149,6 +150,7 @@ export default function MessageInput({
   onDomainAccessDialogOpenChange?: (open: boolean) => void;
   domainAccessPromptNonce?: number;
 }) {
+  const { t } = useTranslation();
   const transcriber = useTranscriber();
   const inputRef = useRef<HTMLInputElement>(null);
   const [whisperOpenAIOutput, setWhisperOpenAIOutput] = useState<any | null>(null);
@@ -188,6 +190,7 @@ export default function MessageInput({
   const [domainAccessDialogDomain, setDomainAccessDialogDomain] = useState<DomainOption | null>(null);
   const [domainAccessUsername, setDomainAccessUsername] = useState('');
   const [domainAccessPassword, setDomainAccessPassword] = useState('');
+  const [domainAccessPasswordVisible, setDomainAccessPasswordVisible] = useState(false);
   const [domainAccessError, setDomainAccessError] = useState('');
   const [domainAccessBusy, setDomainAccessBusy] = useState(false);
   const [dismissedDomainAccessDomainId, setDismissedDomainAccessDomainId] = useState('');
@@ -369,6 +372,7 @@ export default function MessageInput({
     setDomainAccessDialogDomain(selectedDomainOption);
     setDomainAccessUsername('');
     setDomainAccessPassword('');
+    setDomainAccessPasswordVisible(false);
     setDomainAccessError('');
   }, [dismissedDomainAccessDomainId, domainAccessDialogDomain, selectedDomainOption]);
 
@@ -383,6 +387,9 @@ export default function MessageInput({
 
     setDismissedDomainAccessDomainId('');
     setDomainAccessDialogDomain(selectedDomainOption);
+    setDomainAccessUsername('');
+    setDomainAccessPassword('');
+    setDomainAccessPasswordVisible(false);
     setDomainAccessError('');
   }, [domainAccessPromptNonce, selectedDomainOption]);
 
@@ -689,8 +696,62 @@ export default function MessageInput({
     setDomainAccessDialogDomain(domain);
     setDomainAccessUsername('');
     setDomainAccessPassword('');
+    setDomainAccessPasswordVisible(false);
     setDomainAccessError('');
   }, []);
+
+  const closeDomainAccessDialog = useCallback((dismissCurrentDomain: boolean) => {
+    if (dismissCurrentDomain && domainAccessDialogDomain) {
+      setDismissedDomainAccessDomainId(domainAccessDialogDomain.id);
+    }
+    setDomainAccessDialogDomain(null);
+    setDomainAccessUsername('');
+    setDomainAccessPassword('');
+    setDomainAccessPasswordVisible(false);
+    setDomainAccessError('');
+  }, [domainAccessDialogDomain]);
+
+  const submitDomainAccessLogin = useCallback(async () => {
+    const domain = domainAccessDialogDomain;
+    if (!domain) {
+      return;
+    }
+
+    if (!domainAccessUsername.trim() || !domainAccessPassword) {
+      setDomainAccessError('ユーザー名とパスワードを入力してください');
+      return;
+    }
+
+    setDomainAccessBusy(true);
+    setDomainAccessError('');
+    try {
+      const result = await loginDomainAccess(domain.id, domainAccessUsername.trim(), domainAccessPassword);
+      if (!result.ok || !result.accessToken) {
+        setDomainAccessError(result.error || '認証に失敗しました');
+        return;
+      }
+
+      setDomainAccessSession(domain.id, {
+        username: result.username || domainAccessUsername.trim(),
+        accessToken: result.accessToken,
+      });
+      if (selectedDomainRef.current === domain.id) {
+        appliedDomainConfigRef.current = null;
+        await applyDomainOverrides(domain, { forceReloadVrm: true });
+      }
+      applySelectedDomain(domain.id);
+      closeDomainAccessDialog(false);
+    } finally {
+      setDomainAccessBusy(false);
+    }
+  }, [
+    applySelectedDomain,
+    applyDomainOverrides,
+    closeDomainAccessDialog,
+    domainAccessDialogDomain,
+    domainAccessPassword,
+    domainAccessUsername,
+  ]);
 
   const handleDomainOptionClick = useCallback((domain: DomainOption) => {
     if (domain.accessControlEnabled && !hasDomainAccessSession(domain.id)) {
@@ -1563,8 +1624,7 @@ export default function MessageInput({
             </div>
           )}
 
-          <div>
-            <div className='flex flex-col justify-center items-center'>
+          <div className="flex flex-col justify-center items-center">
               {config("chatbot_backend") === "moshi" ? (
                 <IconButton
                 iconName={!moshiMuted ? "24/PauseAlt" : "24/Microphone"}
@@ -1590,7 +1650,6 @@ export default function MessageInput({
                 onClick={isWebSpeechBackend ? toggleWebSpeech : vad.toggle}
               />
               )}
-            </div>
           </div>
 
           <div className="relative flex flex-col justify-center items-center">
@@ -1673,7 +1732,30 @@ export default function MessageInput({
             )}
           </div>
 
-          <div className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/70 px-2 py-1 shadow-sm ring-1 ring-inset ring-slate-700/50 focus-within:ring-slate-500/80">
+          <div className="flex w-full flex-col gap-1">
+            {isChatProcessing && (
+              <div
+                className="flex items-center gap-2 pl-1 text-[11px] font-medium text-slate-300"
+                role="status"
+                aria-live="polite"
+              >
+                <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span>{t("ai_waiting_for_response", "AIの回答を待機中")}</span>
+                <span className="inline-flex text-cyan-300" aria-hidden="true">
+                  {[0, 180, 360].map((delay) => (
+                    <span
+                      key={delay}
+                      className="inline-block animate-pulse"
+                      style={{ animationDelay: `${delay}ms`, animationDuration: '1.2s' }}
+                    >
+                      .
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+
+            <div className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/70 px-2 py-1 shadow-sm ring-1 ring-inset ring-slate-700/50 focus-within:ring-slate-500/80">
             {selectedDomainHasChronicle && chronicleEnabledForInput && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
                   CHRONICLE
@@ -1712,6 +1794,7 @@ export default function MessageInput({
               value={userMessage}
               autoComplete="off"
             />
+            </div>
           </div>
 
           <div className='flex flex-col justify-center items-center'>
@@ -1737,7 +1820,13 @@ export default function MessageInput({
               </p>
             </div>
 
-            <div className="grid gap-3">
+            <form
+              className="grid gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitDomainAccessLogin();
+              }}
+            >
               <label className="grid gap-1 text-sm font-medium text-slate-700">
                 <span>ユーザー名</span>
                 <input
@@ -1750,12 +1839,23 @@ export default function MessageInput({
 
               <label className="grid gap-1 text-sm font-medium text-slate-700">
                 <span>パスワード</span>
-                <input
-                  type="password"
-                  value={domainAccessPassword}
-                  onChange={(e) => setDomainAccessPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-                />
+                <div className="relative">
+                  <input
+                    type={domainAccessPasswordVisible ? 'text' : 'password'}
+                    value={domainAccessPassword}
+                    onChange={(e) => setDomainAccessPassword(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-14 text-sm outline-none focus:border-slate-500"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-2 my-auto inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    onClick={() => setDomainAccessPasswordVisible((prev) => !prev)}
+                    aria-label={domainAccessPasswordVisible ? 'パスワードを隠す' : 'パスワードを表示'}
+                    title={domainAccessPasswordVisible ? 'パスワードを隠す' : 'パスワードを表示'}
+                  >
+                    {domainAccessPasswordVisible ? '隠す' : '表示'}
+                  </button>
+                </div>
               </label>
 
               {domainAccessError ? (
@@ -1763,69 +1863,24 @@ export default function MessageInput({
                   {domainAccessError}
                 </div>
               ) : null}
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-                onClick={() => {
-                  if (domainAccessDialogDomain) {
-                    setDismissedDomainAccessDomainId(domainAccessDialogDomain.id);
-                  }
-                  setDomainAccessDialogDomain(null);
-                  setDomainAccessError('');
-                  setDomainAccessPassword('');
-                }}
-                disabled={domainAccessBusy}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-400"
-                disabled={domainAccessBusy}
-                onClick={async () => {
-                  const domain = domainAccessDialogDomain;
-                  if (!domain) {
-                    return;
-                  }
-
-                  if (!domainAccessUsername.trim() || !domainAccessPassword) {
-                    setDomainAccessError('ユーザー名とパスワードを入力してください');
-                    return;
-                  }
-
-                  setDomainAccessBusy(true);
-                  setDomainAccessError('');
-                  try {
-                    const result = await loginDomainAccess(domain.id, domainAccessUsername.trim(), domainAccessPassword);
-                    if (!result.ok || !result.accessToken) {
-                      setDomainAccessError(result.error || '認証に失敗しました');
-                      return;
-                    }
-
-                    setDomainAccessSession(domain.id, {
-                      username: result.username || domainAccessUsername.trim(),
-                      accessToken: result.accessToken,
-                    });
-                    if (selectedDomainRef.current === domain.id) {
-                      appliedDomainConfigRef.current = null;
-                      await applyDomainOverrides(domain, { forceReloadVrm: true });
-                    }
-                    applySelectedDomain(domain.id);
-                    setDomainAccessDialogDomain(null);
-                    setDomainAccessUsername('');
-                    setDomainAccessPassword('');
-                    setDomainAccessError('');
-                  } finally {
-                    setDomainAccessBusy(false);
-                  }
-                }}
-              >
-                {domainAccessBusy ? '認証中...' : 'ログイン'}
-              </button>
-            </div>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                  onClick={() => closeDomainAccessDialog(true)}
+                  disabled={domainAccessBusy}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:bg-slate-400"
+                  disabled={domainAccessBusy}
+                >
+                  {domainAccessBusy ? '認証中...' : 'ログイン'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

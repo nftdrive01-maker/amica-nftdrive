@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { BasicPage, FormRow, Link, getLinkFromPage } from './common';
-import { updateConfig } from "@/utils/config";
+import { isManagedConfigKey, updateConfig } from "@/utils/config";
 
 const visionEngines = [
   {key: "none",            label: "None"},
@@ -30,18 +30,25 @@ export function VisionBackendPage({
   setBreadcrumbs: (breadcrumbs: Link[]) => void;
 }) {
   const { t } = useTranslation();
+  const visionBackendManaged = isManagedConfigKey("vision_backend");
 
   return (
     <BasicPage
       title={t("Vision Backend")}
       description={t("Vision_Backend_desc", "Select the Vision backend to use")}
     >
+      {visionBackendManaged && (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          この設定は環境変数で固定されているため、クライアント側から変更できません。
+        </p>
+      )}
       <ul role="list" className="divide-y divide-gray-100 max-w-xs">
         <li className="py-4">
           <FormRow label={t("Vision Backend")}>
             <select
               className="mt-2 block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
               value={visionBackend}
+              disabled={visionBackendManaged}
               onChange={(event: React.ChangeEvent<any>) => {
                 setVisionBackend(event.target.value);
                 updateConfig("vision_backend", event.target.value);

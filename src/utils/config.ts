@@ -2,6 +2,13 @@ import { handleConfig, serverConfig } from "@/features/externalAPI/externalAPI";
 
 export const CONFIG_UPDATED_EVENT = "chatvrm:config-updated";
 
+const managedConfigKeys = new Set(
+  (process.env.NEXT_PUBLIC_MANAGED_CONFIG_KEYS || '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean),
+);
+
 const secretConfigKeys = new Set([
   "openai_apikey",
   "vision_openai_apikey",
@@ -20,6 +27,10 @@ const secretConfigKeys = new Set([
 
 export function isSecretConfigKey(key: string): boolean {
   return secretConfigKeys.has(key);
+}
+
+export function isManagedConfigKey(key: string): boolean {
+  return managedConfigKeys.has(key);
 }
 
 export const defaults = {
@@ -49,6 +60,8 @@ export const defaults = {
   show_arbius_introduction: process.env.NEXT_PUBLIC_SHOW_ARBIUS_INTRODUCTION ?? 'false', // Arbius関連のガイド表示
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true', // PWA(ホーム画面追加)の案内
   show_chat_mode: process.env.NEXT_PUBLIC_SHOW_CHAT_MODE ?? 'true',                 // チャットモードの初期表示
+  show_settings_ui: process.env.NEXT_PUBLIC_SHOW_SETTINGS_UI ?? 'true',             // 設定UI全体を表示するか
+  hidden_settings_pages: process.env.NEXT_PUBLIC_HIDDEN_SETTINGS_PAGES ?? '',       // 非表示にする設定ページキーのCSV
   bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',                                // 背景色
   bg_url: process.env.NEXT_PUBLIC_BG_URL ?? '',                                    // 背景画像のパス
   theme_color: process.env.NEXT_PUBLIC_THEME_COLOR ?? '',                          // ドメインテーマ色
@@ -89,6 +102,7 @@ export const defaults = {
   // --- システム基本設定 ---
   tts_muted: 'false',                                                              // 音声出力を最初からミュートにするか
   tts_backend: process.env.NEXT_PUBLIC_TTS_BACKEND ?? 'stylebertvits2',                    // 標準で使用するTTS
+  async_tts_mode: process.env.NEXT_PUBLIC_ASYNC_TTS_MODE ?? 'false',               // true のときはチャット表示を TTS 取得より先に進める
   stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',          // 標準で使用する音声認識
 
   // --- 画像認識 (Vision) 設定 ---
@@ -183,8 +197,8 @@ export function prefixed(key: string) {
 }
 
 function normalizeConfigValue(key: string, value: string): string {
-  if (key === "tts_backend") {
-    return "stylebertvits2";
+  if (key === "tts_backend" && value === "openai") {
+    return "openai_tts";
   }
 
   return value;
@@ -206,7 +220,11 @@ export function config(key: string): string {
     return "";
   }
 
-  if (typeof localStorage !== "undefined" && localStorage.hasOwnProperty(prefixed(key))) {
+  if (
+    typeof localStorage !== "undefined" &&
+    !isManagedConfigKey(key) &&
+    localStorage.hasOwnProperty(prefixed(key))
+  ) {
     const value = (<any>localStorage).getItem(prefixed(key))!;
     return normalizeConfigValue(key, value);
   }
@@ -228,6 +246,13 @@ export async function updateConfig(key: string, value: string) {
   try {
     const normalizedValue = normalizeConfigValue(key, value);
     const localKey = prefixed(key);
+
+    if (isManagedConfigKey(key)) {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(localKey);
+      }
+      return;
+    }
 
     // Update localStorage if available
     if (typeof localStorage !== "undefined") {
@@ -264,6 +289,13 @@ export async function updateConfigBatch(entries: Array<[string, string]>) {
     for (const [key, value] of entries) {
       const normalizedValue = normalizeConfigValue(key, value);
       const localKey = prefixed(key);
+
+      if (isManagedConfigKey(key)) {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem(localKey);
+        }
+        continue;
+      }
 
       if (typeof localStorage !== "undefined") {
         if (isSecretConfigKey(key)) {

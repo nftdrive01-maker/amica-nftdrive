@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { getWindowAI } from "window.ai";
 import { BasicPage, Link, FormRow, getLinkFromPage } from './common';
-import { updateConfig } from "@/utils/config";
+import { isManagedConfigKey, updateConfig } from "@/utils/config";
 import { isTauri } from "@/utils/isTauri";
 
 const chatbotBackends = [
@@ -38,6 +38,7 @@ export function ChatbotBackendPage({
 }) {
   const { t } = useTranslation();
   const [windowAiDetected, setWindowAiDetected] = useState(false);
+  const chatbotBackendManaged = isManagedConfigKey("chatbot_backend");
 
   useEffect(() => {
     (async () => {
@@ -57,12 +58,18 @@ export function ChatbotBackendPage({
       title={t("Chatbot Backend")}
       description={t("Chatbot_Backend_desc", "Select the chatbot backend to use. Echo simply responds with what you type, it is used for testing and demonstration. ChatGPT is a commercial chatbot API from OpenAI, however there are multiple compatible API providers which can be used in lieu of OpenAI. LLama.cpp is a free and open source chatbot backend.")}
     >
+      {chatbotBackendManaged && (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          この設定は環境変数で固定されているため、クライアント側から変更できません。
+        </p>
+      )}
       <ul role="list" className="divide-y divide-gray-100 max-w-xs">
         <li className="py-4">
           <FormRow label={t("Chatbot Backend")}>
             <select
               className="mt-2 block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
               value={chatbotBackend}
+              disabled={chatbotBackendManaged}
               onChange={(event: React.ChangeEvent<any>) => {
                 setChatbotBackend(event.target.value);
                 updateConfig("chatbot_backend", event.target.value);

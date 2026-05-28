@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useRef,
 } from "react";
@@ -26,9 +27,7 @@ import { Link } from "./settings/common";
 
 import { MenuPage } from './settings/MenuPage';
 import { LanguagePage } from './settings/LanguagePage';
-import { ResetSettingsPage } from './settings/ResetSettingsPage';
 import { DeveloperPage } from './settings/DeveloperPage';
-import { CommunityPage } from './settings/CommunityPage';
 
 import { BackgroundImgPage } from './settings/BackgroundImgPage';
 import { BackgroundColorPage } from './settings/BackgroundColorPage';
@@ -89,6 +88,15 @@ export const Settings = ({
   const [breadcrumbs, setBreadcrumbs] = useState<Link[]>([]);
   const [showNotification, setShowNotification] = useState(false);
   const [settingsUpdated, setSettingsUpdated] = useState(false);
+  const hiddenSettingsPages = useMemo(
+    () => new Set(
+      config('hidden_settings_pages')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+    [],
+  );
 
   const [chatbotBackend, setChatbotBackend] = useState(config("chatbot_backend"));
   const [arbiusLLMModelId, setArbiusLLMModelId] = useState(config("arbius_llm_model_id"));
@@ -335,6 +343,17 @@ export const Settings = ({
   }, [chatbotBackend, amicaLifeEnabled]);
 
   useEffect(() => {
+    if (page !== 'main_menu' && hiddenSettingsPages.has(page)) {
+      setPage('main_menu');
+      setBreadcrumbs([]);
+    }
+  }, [hiddenSettingsPages, page]);
+
+  const visibleSettingKeys = useCallback((keys: string[]) => {
+    return keys.filter((key) => !hiddenSettingsPages.has(key));
+  }, [hiddenSettingsPages]);
+
+  useEffect(() => {
     const timeOutId = setTimeout(() => {
       if (settingsUpdated) {
         setShowNotification(true);
@@ -431,17 +450,17 @@ export const Settings = ({
     switch (page) {
       case 'main_menu':
         return <MenuPage
-          keys={["appearance", "amica_life", "chatbot", "language", "tts", "stt", "vision", "developer", "external_api", "reset_settings", "community"]}
+          keys={visibleSettingKeys(["appearance", "amica_life", "chatbot", "language", "tts", "stt", "vision", "developer", "external_api"])}
           menuClick={handleMenuClick} />;
 
       case 'appearance':
         return <MenuPage
-          keys={["background_img", "background_color", "background_video", "character_model", "character_animation"]}
+          keys={visibleSettingKeys(["background_img", "background_color", "background_video", "character_model", "character_animation"])}
           menuClick={handleMenuClick} />;
 
       case 'chatbot':
         return <MenuPage
-          keys={["chatbot_backend", "name", "system_prompt", "arbius_llm_settings", "chatgpt_settings", "llamacpp_settings", "ollama_settings", "koboldai_settings", "moshi_settings", "openrouter_settings"]}
+          keys={visibleSettingKeys(["chatbot_backend", "name", "system_prompt", "arbius_llm_settings", "chatgpt_settings", "llamacpp_settings", "ollama_settings", "koboldai_settings", "moshi_settings", "openrouter_settings"])}
           menuClick={handleMenuClick} />;
 
       case 'language':
@@ -451,21 +470,18 @@ export const Settings = ({
 
       case 'tts':
         return <MenuPage
-          keys={["tts_backend", "elevenlabs_settings", "speecht5_settings", "coquiLocal_settings", "openai_tts_settings", "piper_settings", "localXTTS_settings", "kokoro_settings", "rvc_settings", "stylebertvits2_settings"]}
+          keys={visibleSettingKeys(["tts_backend", "elevenlabs_settings", "speecht5_settings", "coquiLocal_settings", "openai_tts_settings", "piper_settings", "localXTTS_settings", "kokoro_settings", "rvc_settings", "stylebertvits2_settings"])}
           menuClick={handleMenuClick} />;
 
       case 'stt':
         return <MenuPage
-          keys={["stt_backend", "stt_wake_word", "whisper_openai_settings", "whispercpp_settings"]}
+          keys={visibleSettingKeys(["stt_backend", "stt_wake_word", "whisper_openai_settings", "whispercpp_settings"])}
           menuClick={handleMenuClick} />;
 
       case 'vision':
         return <MenuPage
-          keys={["vision_backend", "vision_llamacpp_settings", "vision_ollama_settings", "vision_openai_settings", "vision_system_prompt"]}
+          keys={visibleSettingKeys(["vision_backend", "vision_llamacpp_settings", "vision_ollama_settings", "vision_openai_settings", "vision_system_prompt"])}
           menuClick={handleMenuClick} />;
-
-      case 'reset_settings':
-        return <ResetSettingsPage />;
 
       case 'developer':
         return <DeveloperPage
@@ -479,9 +495,6 @@ export const Settings = ({
           setUseWebGPU={setUseWebGPU}
           setSettingsUpdated={setSettingsUpdated}
         />;
-
-      case 'community':
-        return <CommunityPage />
 
       case 'background_img':
         return <BackgroundImgPage

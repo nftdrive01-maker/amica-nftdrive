@@ -151,7 +151,7 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                 />
             )}
             {hasMessages && (
-                <div className="fixed bottom-0 z-10 mb-40 flex max-h-[90%] w-full flex-col justify-end lg:left-[33.333vw] lg:w-[33.333vw] lg:mb-20">
+                <div className="fixed inset-x-0 bottom-40 top-14 z-10 flex w-full flex-col justify-end lg:bottom-0 lg:left-[33.333vw] lg:top-auto lg:max-h-[90%] lg:w-[33.333vw] lg:mb-20">
                     <div className="pointer-events-none absolute inset-y-3 left-1 right-1 z-0 rounded-none bg-slate-950/22 backdrop-blur-[3px] lg:inset-y-0 lg:left-0 lg:right-0" />
                     <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.2)_0%,rgba(15,23,42,0.24)_10%,rgba(15,23,42,0.32)_22%,rgba(15,23,42,0.4)_34%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.4)_66%,rgba(15,23,42,0.32)_78%,rgba(15,23,42,0.24)_90%,rgba(15,23,42,0.2)_100%)]" />
                     <div ref={chatViewportRef} className="scroll-hidden relative z-10 max-h-full w-full overflow-y-auto flex flex-col-reverse">
@@ -187,9 +187,9 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                     </button>
                 </div>
             )}
-            <div className="pointer-events-none fixed inset-y-0 right-0 z-40 flex items-end justify-end sm:items-stretch">
+            <div className="pointer-events-none fixed inset-x-0 bottom-28 top-14 z-40 flex justify-end px-2 sm:inset-y-0 sm:right-0 sm:px-0 sm:items-stretch">
                 <div className={clsx(
-                    "pointer-events-auto mb-28 mr-0 flex h-[88%] w-[min(92vw,700px)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-900/80 shadow-lg backdrop-blur-md transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:w-[34vw] xl:w-[32vw]",
+                    "pointer-events-auto flex h-full w-full max-w-[min(96vw,700px)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-900/80 shadow-lg backdrop-blur-md transition-all duration-300 sm:w-[min(94vw,700px)] lg:mb-12 lg:h-[88%] lg:w-[34vw] xl:w-[32vw]",
                     isOverlayOpen && overlayResult ? "translate-x-0 opacity-100" : "translate-x-full opacity-0",
                 )}>
                     <div className="flex items-start justify-between border-b border-slate-700/60 bg-slate-800/70 px-3 py-2 text-slate-200">

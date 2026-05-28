@@ -77,7 +77,7 @@ import { WaitingScreen } from "@/components/waitingScreen";
 import { acquireSession, sessionManager } from "@/lib/sessionManager";
 import { fetchPublicDomainOptions, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
 import { getPersistentUserId } from "@/lib/userIdentity";
-import { clearDomainAccessSession } from '@/lib/domainAccessSession';
+import { clearDomainAccessSession, hasDomainAccessSession } from '@/lib/domainAccessSession';
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -186,6 +186,7 @@ export default function Home() {
   const [showChatLog, setShowChatLog] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [showChatMode, setShowChatMode] = useState(() => config("show_chat_mode") === "true");
+  const showSettingsUi = config("show_settings_ui") === "true";
   const [showHistory, setShowHistory] = useState(false);
   const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMainMenu, setShowMainMenu] = useState(false);
@@ -193,6 +194,19 @@ export default function Home() {
   useEffect(() => {
     void updateConfig("show_chat_mode", showChatMode ? "true" : "false");
   }, [showChatMode]);
+
+  useEffect(() => {
+    if (!showSettingsUi && showSettings) {
+      setShowSettings(false);
+    }
+    if (!showSettingsUi && showDebug) {
+      setShowDebug(false);
+    }
+    if (!showSettingsUi && showMainMenu) {
+      setShowMainMenu(false);
+    }
+  }, [showDebug, showMainMenu, showSettings, showSettingsUi]);
+
   const [showMoshi, setShowMoshi] = useState(false);
   const mainMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
@@ -658,6 +672,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!showContent) return;
+    if (domainAuthDialogOpen) return;
 
     let cancelled = false;
 
@@ -673,11 +688,26 @@ export default function Home() {
 
       try {
         const sessionId = sessionManager.getSessionId() || '';
-        const [attached, domains] = await Promise.all([
-          getServerAttachedPackDetails(sessionId, selectedDomainId),
-          fetchPublicDomainOptions(),
-        ]);
+        const domains = await fetchPublicDomainOptions();
         const domain = domains.find((item) => item.id === selectedDomainId);
+        const requiresDomainAccess = domain?.accessControlEnabled === true;
+        const hasDomainAccess = hasDomainAccessSession(selectedDomainId);
+
+        if (requiresDomainAccess && !hasDomainAccess && !sessionId) {
+          if (!cancelled) {
+            setSelectedDomainGazeEnabled(domain?.gazeWakeEnabled ?? true);
+            setSelectedDomainLabel(domain?.label || config('injection_default_domain_label') || 'デフォルト');
+            setSelectedDomainChronicleAttached(Boolean(domain?.chronicleAttached));
+            setAttachedPackDetails({
+              mcpServers: domain?.mcpServerIds ?? [],
+              knowledges: domain?.knowledgeIds ?? [],
+              isReachable: true,
+            });
+          }
+          return;
+        }
+
+        const attached = await getServerAttachedPackDetails(sessionId, selectedDomainId);
         const nextGazeEnabled = domain?.gazeWakeEnabled ?? true;
         const nextDomainLabel = domain?.label || config('injection_default_domain_label') || 'デフォルト';
         const nextChronicleAttached = Boolean(domain?.chronicleAttached);
@@ -726,7 +756,7 @@ export default function Home() {
       window.clearInterval(timerId);
       window.removeEventListener('focus', refreshAttachedPackDetails);
     };
-  }, [selectedDomainId, showContent]);
+  }, [domainAuthDialogOpen, selectedDomainId, showContent]);
 
   if (!showContent) return <></>;
 
@@ -800,7 +830,7 @@ export default function Home() {
         <DefaultArkCoreAvatar visible={showDefaultArkCoreAvatar} speaking={chatSpeaking} />
         <ImageAvatar speaking={chatSpeaking} />
         <VrmViewer chatMode={showChatMode}/>
-        {showSettings && (
+        {showSettingsUi && showSettings && (
           <Settings
             onClickClose={() => setShowSettings(false)}
           />
@@ -934,15 +964,17 @@ export default function Home() {
         ref={mainMenuRef}
         aria-hidden={domainAuthDialogOpen}
       >
-        <button
-          type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"
-          onClick={() => setShowMainMenu((prev) => !prev)}
-          aria-label="メニューを開閉"
-          aria-expanded={showMainMenu}
-        >
-          {showMainMenu ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
-        </button>
+        {showSettingsUi && (
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"
+            onClick={() => setShowMainMenu((prev) => !prev)}
+            aria-label="メニューを開閉"
+            aria-expanded={showMainMenu}
+          >
+            {showMainMenu ? <XMarkIcon className="h-6 w-6" /> : <Bars3Icon className="h-6 w-6" />}
+          </button>
+        )}
 
         {selectedDomainGazeEnabled && (
           <button
@@ -992,15 +1024,35 @@ export default function Home() {
           <ClockIcon className="h-5 w-5" />
         </button>
 
+        {muted !== null && (
+          <button
+            type="button"
+            className={clsx(
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              muted
+                ? "bg-amber-700/70 hover:bg-amber-600/80"
+                : "bg-slate-900/60 hover:bg-slate-800/80"
+            )}
+            title={muted ? "ミュートを解除" : "ミュートにする"}
+            aria-label={muted ? "ミュートを解除" : "ミュートにする"}
+            aria-pressed={muted}
+            onClick={toggleTTSMute}
+          >
+            {muted ? <SpeakerXMarkIcon className="h-5 w-5" /> : <SpeakerWaveIcon className="h-5 w-5" />}
+          </button>
+        )}
+
         {showMainMenu && (
         <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
           <div className='flex flex-col justify-center items-center p-1 space-y-3'>
-            <MenuButton
-              large={isVRHeadset}
-              icon={WrenchScrewdriverIcon}
-              onClick={() => setShowSettings(true)}
-              label="show settings"
-            />
+            {showSettingsUi && (
+              <MenuButton
+                large={isVRHeadset}
+                icon={WrenchScrewdriverIcon}
+                onClick={() => setShowSettings(true)}
+                label="show settings"
+              />
+            )}
 
             {showChatLog ? (
               <MenuButton
@@ -1050,19 +1102,23 @@ export default function Home() {
               />
             )}
 
-            <MenuButton
-              large={isVRHeadset}
-              icon={ShareIcon}
-              href="/share"
-              target={isTauri() ? '' : '_blank'}
-              label="share"
-            />
-            <MenuButton
-              large={isVRHeadset}
-              icon={CloudArrowDownIcon}
-              href="/import"
-              label="import"
-            />
+            {showSettingsUi && (
+              <MenuButton
+                large={isVRHeadset}
+                icon={ShareIcon}
+                href="/share"
+                target={isTauri() ? '' : '_blank'}
+                label="share"
+              />
+            )}
+            {showSettingsUi && (
+              <MenuButton
+                large={isVRHeadset}
+                icon={CloudArrowDownIcon}
+                href="/import"
+                label="import"
+              />
+            )}
 
             { showSubconciousText ? (
               <MenuButton
@@ -1097,12 +1153,14 @@ export default function Home() {
               label="Virtual Reality"
             />*/}
 
-            <MenuButton
-              large={isVRHeadset}
-              icon={CodeBracketSquareIcon}
-              onClick={() => setShowDebug(true)}
-              label="debug"
-            />
+            {showSettingsUi && (
+              <MenuButton
+                large={isVRHeadset}
+                icon={CodeBracketSquareIcon}
+                onClick={() => setShowDebug(true)}
+                label="debug"
+              />
+            )}
 
             {/* Temp Disable : WebXR */}
             {/* { showChatMode ? (

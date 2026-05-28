@@ -1,8 +1,30 @@
+const fs = require("fs");
+const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 const withPWA = require("@ducanh2912/next-pwa").default({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
 });
+
+if (process.env.NODE_ENV === "development") {
+  const publicDir = path.join(__dirname, "public");
+  const stalePwaAssets = ["sw.js", "sw.js.map"];
+
+  for (const fileName of stalePwaAssets) {
+    const filePath = path.join(publicDir, fileName);
+    if (fs.existsSync(filePath)) {
+      fs.rmSync(filePath, { force: true });
+    }
+  }
+
+  if (fs.existsSync(publicDir)) {
+    for (const fileName of fs.readdirSync(publicDir)) {
+      if (fileName.startsWith("workbox-") && fileName.endsWith(".js")) {
+        fs.rmSync(path.join(publicDir, fileName), { force: true });
+      }
+    }
+  }
+}
 
 const output = process.env.NEXT_OUTPUT || undefined;
 

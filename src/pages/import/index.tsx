@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '@/components/iconButton';
 import { useRouter } from 'next/router';
+import { config } from '@/utils/config';
 
 export default function Import() {
   const { t } = useTranslation();
@@ -9,6 +10,12 @@ export default function Import() {
   const [sqid, setSqid] = useState('');
 
   const router = useRouter();
+  const showSettingsUi = config('show_settings_ui') === 'true';
+
+  if (!showSettingsUi) {
+    void router.replace('/');
+    return null;
+  }
 
   const handleCloseIcon = () => {
     router.push('/');

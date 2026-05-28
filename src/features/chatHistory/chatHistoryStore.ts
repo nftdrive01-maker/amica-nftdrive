@@ -1,5 +1,6 @@
 import { saveAs } from "file-saver";
 import { Message } from "@/features/chat/messages";
+import { fetchPublicDomainOptions } from "@/lib/injectionClient";
 import { chatHistoryDb } from "./chatHistoryDb";
 import {
   ChatHistoryEntry,
@@ -50,6 +51,15 @@ export function mapMessagesToHistoryEntries(messages: Message[], sessionId?: str
 }
 
 export class ChatHistoryStore {
+  private async getVisibleDomainIds(): Promise<Set<string>> {
+    const domains = await fetchPublicDomainOptions();
+    return new Set(
+      domains
+        .map((domain) => String(domain.id || "").trim())
+        .filter(Boolean),
+    );
+  }
+
   public async upsertMessages(messages: Message[], sessionId?: string, userId?: string): Promise<void> {
     const entries = mapMessagesToHistoryEntries(messages, sessionId, userId);
     await this.upsertEntries(entries);
@@ -64,8 +74,11 @@ export class ChatHistoryStore {
   }
 
   public async listDomainIds(): Promise<string[]> {
+    const visibleDomainIds = await this.getVisibleDomainIds();
     const domainIds = await chatHistoryDb.history.orderBy("domainId").uniqueKeys();
-    return domainIds.map((value) => String(value));
+    return domainIds
+      .map((value) => String(value))
+      .filter((domainId) => visibleDomainIds.has(domainId));
   }
 
   public async search(params: ChatHistorySearchParams): Promise<ChatHistorySearchResult> {
@@ -74,6 +87,14 @@ export class ChatHistoryStore {
     const fromTimestamp = params.fromTimestamp ?? Number.MIN_SAFE_INTEGER;
     const toTimestamp = params.toTimestamp ?? Number.MAX_SAFE_INTEGER;
     const hasDomain = Boolean(params.domainId);
+    const visibleDomainIds = await this.getVisibleDomainIds();
+
+    if (hasDomain && !visibleDomainIds.has(params.domainId!)) {
+      return {
+        items: [],
+        totalCount: 0,
+      };
+    }
 
     let items: ChatHistoryEntry[];
 
@@ -89,6 +110,7 @@ export class ChatHistoryStore {
         .between(fromTimestamp, toTimestamp, true, true)
         .reverse()
         .toArray();
+      items = items.filter((entry) => visibleDomainIds.has(entry.domainId));
     }
 
     if (query) {

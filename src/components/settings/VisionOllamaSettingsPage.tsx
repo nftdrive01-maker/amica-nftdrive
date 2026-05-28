@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { BasicPage, FormRow, NotUsingAlert } from "./common";
 import { TextInput } from "@/components/textInput";
-import { config, updateConfig } from "@/utils/config";
+import { config, isManagedConfigKey, updateConfig } from "@/utils/config";
 
 export function VisionOllamaSettingsPage({
   visionOllamaUrl,
@@ -18,6 +18,9 @@ export function VisionOllamaSettingsPage({
   setSettingsUpdated: (updated: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const visionOllamaUrlManaged = isManagedConfigKey("vision_ollama_url");
+  const visionOllamaModelManaged = isManagedConfigKey("vision_ollama_model");
+  const hasManagedField = visionOllamaUrlManaged || visionOllamaModelManaged;
 
   const description = <>{t("ollama_desc", "Ollama lets you get up and running with large language models locally. Download from")} <a href="https://ollama.ai/">{t("ollama.ai")}</a></>;
 
@@ -26,6 +29,11 @@ export function VisionOllamaSettingsPage({
       title={t("Ollama") + " " + t("Settings")}
       description={description}
     >
+      {hasManagedField && (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Vision 用 Ollama 設定の一部は環境変数で固定されているため、クライアント側から変更できません。
+        </p>
+      )}
       { config("vision_backend") !== "vision_ollama" && (
         <NotUsingAlert>
           {t("not_using_alert", "You are not currently using {{name}} as your {{what}} backend. These settings will not be used.", {name: t("Ollama"), what: t("Vision")})}
@@ -36,6 +44,7 @@ export function VisionOllamaSettingsPage({
           <FormRow label={t("API URL")}>
             <TextInput
               value={visionOllamaUrl}
+              readOnly={visionOllamaUrlManaged}
               onChange={(event: React.ChangeEvent<any>) => {
                 setVisionOllamaUrl(event.target.value);
                 updateConfig("vision_ollama_url", event.target.value);
@@ -48,6 +57,7 @@ export function VisionOllamaSettingsPage({
           <FormRow label={t("Model")}>
             <TextInput
               value={visionOllamaModel}
+              readOnly={visionOllamaModelManaged}
               onChange={(event: React.ChangeEvent<any>) => {
                 setVisionOllamaModel(event.target.value);
                 updateConfig("vision_ollama_model", event.target.value);

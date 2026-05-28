@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { updateConfig, defaultConfig } from '@/utils/config';
+import { config, updateConfig, defaultConfig } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
 import VrmDemo from "@/components/vrmDemo";
 import { supabase } from '@/utils/supabase';
@@ -12,6 +12,7 @@ import { BlobToBase64 } from '@/utils/blobDataUtils';
 export default function Import() {
   const { t } = useTranslation();
   const router = useRouter()
+  const showSettingsUi = config('show_settings_ui') === 'true';
 
   const [description, setDescription] = useState('');
   const [name, setName] = useState('');
@@ -35,6 +36,11 @@ export default function Import() {
   }, []);
 
   useEffect(() => {
+    if (!showSettingsUi) {
+      void router.replace('/');
+      return;
+    }
+
     async function getCharacter() {
       const { data, error } = await supabase
         .from('characters')
@@ -76,7 +82,11 @@ export default function Import() {
     if (router.query.sqid) {
       getCharacter();
     }
-  }, [router]);
+  }, [router, showSettingsUi]);
+
+  if (!showSettingsUi) {
+    return null;
+  }
 
 
   function overrideConfig() {

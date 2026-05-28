@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { messages, model, ...rest } = body;
+    const hasVisionImages = Array.isArray((rest as { images?: unknown[] }).images) && ((rest as { images?: unknown[] }).images?.length || 0) > 0;
 
     // クライアント（chat.ts）からsystemメッセージが来ていればそれを優先する
     // systemが無い場合のみ環境変数で補完する
@@ -56,10 +57,15 @@ export async function POST(req: NextRequest) {
     }
 
 
-    const ollamaBaseUrl =
-      process.env.OLLAMA_URL ||
-      process.env.NEXT_PUBLIC_OLLAMA_URL ||
-      "http://127.0.0.1:11434";
+    const ollamaBaseUrl = hasVisionImages
+      ? process.env.VISION_OLLAMA_URL ||
+        process.env.NEXT_PUBLIC_VISION_OLLAMA_URL ||
+        process.env.OLLAMA_URL ||
+        process.env.NEXT_PUBLIC_OLLAMA_URL ||
+        "http://127.0.0.1:11434"
+      : process.env.OLLAMA_URL ||
+        process.env.NEXT_PUBLIC_OLLAMA_URL ||
+        "http://127.0.0.1:11434";
     const normalizedOllamaBaseUrl = ollamaBaseUrl.replace(/\/$/, "");
     const ollamaUrl = `${normalizedOllamaBaseUrl}/api/chat`;
     const res = await fetch(ollamaUrl, {

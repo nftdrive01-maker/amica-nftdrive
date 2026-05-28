@@ -708,6 +708,7 @@ export class Chat {
 
       if (
         this.currentAssistantMessage != "" &&
+        config("async_tts_mode") !== "true" &&
         !this.isAwake() &&
         config("amica_life_enabled") === "true"
       ) {
@@ -1131,6 +1132,7 @@ export class Chat {
     let rolePlay = "";
     let receivedMessage = "";
     let insertedJapaneseFallback = false;
+    const asyncTtsMode = config("async_tts_mode") === "true";
 
     if (this.pendingChronicleDecoratedBlock) {
       this.bubbleMessage("assistant", this.pendingChronicleDecoratedBlock);
@@ -1188,6 +1190,10 @@ export class Chat {
             }
 
             if (!isThinking) {
+              if (asyncTtsMode) {
+                this.bubbleMessage("assistant", aiTalks[0].text);
+              }
+
               console.debug("tts enqueue", {
                 streamIdx,
                 text: aiTalks[0].text,
@@ -1197,6 +1203,7 @@ export class Chat {
                 screenplay: aiTalks[0],
                 streamIdx: streamIdx,
                 domainId,
+                bubbleToChat: !asyncTtsMode,
               });
             }
 
@@ -1290,7 +1297,7 @@ export class Chat {
           return voice.audio;
         }
         case "piper": {
-          const voice = await piper(talk.message);
+          const voice = await piper(talk.message, domainId);
           if (rvcEnabled) {
             return await this.handleRvc(voice.audio);
           }

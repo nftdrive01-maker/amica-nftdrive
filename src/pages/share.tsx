@@ -61,6 +61,8 @@ function vrmDetector(source: File, type: string): Promise<string> {
 export default function Share() {
   const { t } = useTranslation();
   const { viewer } = useContext(ViewerContext);
+  const router = useRouter();
+  const showSettingsUi = config('show_settings_ui') === 'true';
 
   const [description, setDescription] = useState('');
   const [name, setName] = useState('');
@@ -102,6 +104,11 @@ export default function Share() {
   }
 
   useEffect(() => {
+    if (!showSettingsUi) {
+      void router.replace('/');
+      return;
+    }
+
     setName(config('name'));
     setSystemPrompt(config('system_prompt'));
     setVisionSystemPrompt(config('vision_system_prompt'));
@@ -114,7 +121,7 @@ export default function Share() {
     setVrmSaveType(config('vrm_save_type'));
     setAnimationUrl(config('animation_url'));
     setVoiceUrl(config('voice_url'));
-  }, []);
+  }, [router, showSettingsUi]);
 
   useEffect(() => {
     if (vrmLoadedFromIndexedDb) {
@@ -123,7 +130,7 @@ export default function Share() {
       updateConfig('vrm_save_type', 'web');
       setVrmSaveType('web');
     }
-  }, [vrmLoadedFromIndexedDb]);
+  }, [vrmHash, vrmLoadedFromIndexedDb, vrmUrl]);
 
   useEffect(() => {
     setShowUploadLocalVrmMessage(vrmSaveType == 'local' && !vrmLoadedFromIndexedDb && !vrmLoadingFromIndexedDb);
@@ -163,8 +170,6 @@ export default function Share() {
     register();
   }
 
-  const router = useRouter();
-
   const handleCloseIcon = () => {
     router.push('/');
   };
@@ -175,6 +180,10 @@ export default function Share() {
     document.body.style.backgroundRepeat = `no-repeat`;
     document.body.style.backgroundPosition = `bottom right`;
   }, []);
+
+  if (!showSettingsUi) {
+    return null;
+  }
 
   return (
     
