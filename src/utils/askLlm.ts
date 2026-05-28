@@ -12,6 +12,16 @@ import { config } from "@/utils/config";
 import { processResponse } from "@/utils/processResponse";
 import { fetchInjectedContext } from "@/lib/injectionClient";
 
+function resolveActiveDomainId(): string {
+  const selectedDomainId =
+    typeof window !== 'undefined'
+      ? (window.localStorage.getItem('amica_selected_domain_id') || '').trim()
+      : '';
+  const defaultDomainId = (config('injection_default_domain') || '').trim();
+
+  return selectedDomainId || defaultDomainId || 'default';
+}
+
 // Function to ask llm with custom system prompt, if doesn't want it to speak provide the chat in params as null.
 export async function askLLM(
   systemPrompt: string,
@@ -22,6 +32,7 @@ export async function askLLM(
   let readers = [];
   let currentStreamIdx = 0
   let setChatProcessing = (_processing: boolean) => {};
+  const activeDomainId = resolveActiveDomainId();
 
   chat === null ? currentStreamIdx = 0 : null;
 
@@ -34,7 +45,7 @@ export async function askLLM(
   // Fetch injected context from injection-tool (fail-open)
   const injected = await fetchInjectedContext(
     userPrompt,
-    config("injection_default_domain")
+    activeDomainId
   );
 
   // Compose system prompt with injected context
@@ -152,6 +163,7 @@ export async function askLLM(
               chat.ttsJobs.enqueue({
                 screenplay: aiTalks[0],
                 streamIdx: currentStreamIdx,
+                domainId: activeDomainId,
               });
             }
 

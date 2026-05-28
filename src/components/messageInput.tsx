@@ -208,6 +208,11 @@ export default function MessageInput({
     imageAvatarTalkUrl: config('image_avatar_talk_url'),
     imageAvatarTalkIntervalMs: parseInt(config('image_avatar_talk_interval_ms'), 10) || 180,
     ttsMuted: config("tts_muted"),
+    amicaLifeEnabled: config('amica_life_enabled'),
+    timeBeforeIdleSec: config('time_before_idle_sec'),
+    minTimeIntervalSec: config('min_time_interval_sec'),
+    maxTimeIntervalSec: config('max_time_interval_sec'),
+    timeToSleepSec: config('time_to_sleep_sec'),
     stylebertvits2ModelId: config("stylebertvits2_model_id"),
     stylebertvits2Style: config("stylebertvits2_style"),
   });
@@ -252,6 +257,11 @@ export default function MessageInput({
         imageAvatarTalkIntervalMs: 180,
         ttsBackend: '',
         ttsMuted: undefined,
+        amicaLifeEnabled: undefined,
+        timeBeforeIdleSec: undefined,
+        minTimeIntervalSec: undefined,
+        maxTimeIntervalSec: undefined,
+        timeToSleepSec: undefined,
         stylebertvits2ModelId: '',
         stylebertvits2Style: '',
         gazeWakeEnabled: true,
@@ -288,6 +298,23 @@ export default function MessageInput({
               : 180,
           ttsBackend: String(item.ttsBackend ?? '').trim(),
           ttsMuted: typeof item.ttsMuted === 'boolean' ? item.ttsMuted : undefined,
+          amicaLifeEnabled: typeof item.amicaLifeEnabled === 'boolean' ? item.amicaLifeEnabled : undefined,
+          timeBeforeIdleSec:
+            typeof item.timeBeforeIdleSec === 'number' && item.timeBeforeIdleSec > 0
+              ? item.timeBeforeIdleSec
+              : undefined,
+          minTimeIntervalSec:
+            typeof item.minTimeIntervalSec === 'number' && item.minTimeIntervalSec > 0
+              ? item.minTimeIntervalSec
+              : undefined,
+          maxTimeIntervalSec:
+            typeof item.maxTimeIntervalSec === 'number' && item.maxTimeIntervalSec > 0
+              ? item.maxTimeIntervalSec
+              : undefined,
+          timeToSleepSec:
+            typeof item.timeToSleepSec === 'number' && item.timeToSleepSec > 0
+              ? item.timeToSleepSec
+              : undefined,
           stylebertvits2ModelId: String(item.stylebertvits2ModelId ?? '').trim(),
           stylebertvits2Style: String(item.stylebertvits2Style ?? '').trim(),
           gazeWakeEnabled: typeof item.gazeWakeEnabled === 'boolean' ? item.gazeWakeEnabled : true,
@@ -591,6 +618,26 @@ export default function MessageInput({
       typeof domain?.ttsMuted === 'boolean'
         ? domain.ttsMuted
         : baseline.ttsMuted === 'true';
+    const nextAmicaLifeEnabled =
+      typeof domain?.amicaLifeEnabled === 'boolean'
+        ? domain.amicaLifeEnabled
+        : baseline.amicaLifeEnabled === 'true';
+    const nextTimeBeforeIdleSec =
+      typeof domain?.timeBeforeIdleSec === 'number' && domain.timeBeforeIdleSec > 0
+        ? domain.timeBeforeIdleSec
+        : parseInt(baseline.timeBeforeIdleSec, 10) || 20;
+    const nextMinTimeIntervalSec =
+      typeof domain?.minTimeIntervalSec === 'number' && domain.minTimeIntervalSec > 0
+        ? domain.minTimeIntervalSec
+        : parseInt(baseline.minTimeIntervalSec, 10) || 10;
+    const nextMaxTimeIntervalSec =
+      typeof domain?.maxTimeIntervalSec === 'number' && domain.maxTimeIntervalSec > 0
+        ? domain.maxTimeIntervalSec
+        : parseInt(baseline.maxTimeIntervalSec, 10) || 20;
+    const nextTimeToSleepSec =
+      typeof domain?.timeToSleepSec === 'number' && domain.timeToSleepSec > 0
+        ? domain.timeToSleepSec
+        : parseInt(baseline.timeToSleepSec, 10) || 90;
     const nextModelId = domain?.stylebertvits2ModelId?.trim() || baseline.stylebertvits2ModelId;
     const nextStyle = domain?.stylebertvits2Style?.trim() || baseline.stylebertvits2Style;
 
@@ -605,6 +652,11 @@ export default function MessageInput({
       ['image_avatar_idle_url', nextImageAvatarIdleUrl],
       ['image_avatar_talk_url', nextImageAvatarTalkUrl],
       ['image_avatar_talk_interval_ms', String(nextImageAvatarTalkIntervalMs)],
+      ['amica_life_enabled', nextAmicaLifeEnabled ? 'true' : 'false'],
+      ['time_before_idle_sec', String(nextTimeBeforeIdleSec)],
+      ['min_time_interval_sec', String(nextMinTimeIntervalSec)],
+      ['max_time_interval_sec', String(nextMaxTimeIntervalSec)],
+      ['time_to_sleep_sec', String(nextTimeToSleepSec)],
       ['stylebertvits2_model_id', nextModelId],
       ['stylebertvits2_style', nextStyle],
     ];
@@ -784,6 +836,11 @@ export default function MessageInput({
       imageAvatarTalkUrl: domain?.imageAvatarTalkUrl || '',
       imageAvatarTalkIntervalMs: domain?.imageAvatarTalkIntervalMs ?? 180,
       ttsMuted: domain?.ttsMuted,
+      amicaLifeEnabled: domain?.amicaLifeEnabled,
+      timeBeforeIdleSec: domain?.timeBeforeIdleSec,
+      minTimeIntervalSec: domain?.minTimeIntervalSec,
+      maxTimeIntervalSec: domain?.maxTimeIntervalSec,
+      timeToSleepSec: domain?.timeToSleepSec,
       stylebertvits2ModelId: domain?.stylebertvits2ModelId || '',
       stylebertvits2Style: domain?.stylebertvits2Style || '',
     });

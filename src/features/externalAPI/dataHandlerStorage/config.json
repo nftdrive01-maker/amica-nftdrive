@@ -97,7 +97,7 @@
   "max_time_interval_sec": "20",
   "time_to_sleep_sec": "90",
   "idle_text_prompt": "No file selected",
-  "name": "Ark-i Core",
+  "name": "夢　未来",
   "system_prompt": "",
   "stylebertvits2_model_id": "0",
   "stylebertvits2_style": "Neutral",
@@ -117,7 +117,7 @@
   "image_avatar_talk_url": "",
   "image_avatar_talk_interval_ms": "180",
   "show_chat_mode": "false",
-  "theme_color": "#468db9",
+  "theme_color": "#6eeff2",
   "hidden_settings_pages": "chatbot,tts,stt,vision,developer,external_api",
   "async_tts_mode": "true",
   "show_settings_ui": "false"

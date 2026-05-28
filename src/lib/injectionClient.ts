@@ -28,6 +28,11 @@ export type PublicDomainOption = {
   stylebertvits2ModelId?: string;
   stylebertvits2Style?: string;
   ttsMuted?: boolean;
+  amicaLifeEnabled?: boolean;
+  timeBeforeIdleSec?: number;
+  minTimeIntervalSec?: number;
+  maxTimeIntervalSec?: number;
+  timeToSleepSec?: number;
   gazeWakeEnabled?: boolean;
   gazeHoldMs?: number;
   gazeReleaseMs?: number;
@@ -599,6 +604,16 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
                 ? domain.stylebertvits2Style.trim()
                 : '',
             ttsMuted: typeof domain.ttsMuted === 'boolean' ? domain.ttsMuted : undefined,
+            amicaLifeEnabled:
+              typeof domain.amicaLifeEnabled === 'boolean' ? domain.amicaLifeEnabled : undefined,
+            timeBeforeIdleSec:
+              typeof domain.timeBeforeIdleSec === 'number' ? domain.timeBeforeIdleSec : undefined,
+            minTimeIntervalSec:
+              typeof domain.minTimeIntervalSec === 'number' ? domain.minTimeIntervalSec : undefined,
+            maxTimeIntervalSec:
+              typeof domain.maxTimeIntervalSec === 'number' ? domain.maxTimeIntervalSec : undefined,
+            timeToSleepSec:
+              typeof domain.timeToSleepSec === 'number' ? domain.timeToSleepSec : undefined,
             gazeWakeEnabled:
               typeof domain.gazeWakeEnabled === 'boolean' ? domain.gazeWakeEnabled : undefined,
             gazeHoldMs:
@@ -635,6 +650,11 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
           stylebertvits2ModelId?: string;
           stylebertvits2Style?: string;
           ttsMuted?: boolean;
+          amicaLifeEnabled?: boolean;
+          timeBeforeIdleSec?: number;
+          minTimeIntervalSec?: number;
+          maxTimeIntervalSec?: number;
+          timeToSleepSec?: number;
           gazeWakeEnabled?: boolean;
           gazeHoldMs?: number;
           gazeReleaseMs?: number;

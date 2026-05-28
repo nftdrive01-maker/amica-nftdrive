@@ -49,6 +49,16 @@ import { handleUserInput } from '../externalAPI/externalAPI';
 import { loadVRMAnimation } from '@/lib/VRMAnimation/loadVRMAnimation';
 import { sessionManager } from '@/lib/sessionManager';
 
+function resolveActiveDomainId(): string {
+  const selectedDomainId =
+    typeof window !== 'undefined'
+      ? (window.localStorage.getItem('amica_selected_domain_id') || '').trim()
+      : '';
+  const defaultDomainId = (config('injection_default_domain') || '').trim();
+
+  return selectedDomainId || defaultDomainId || 'default';
+}
+
 function generateHistoryId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -624,6 +634,8 @@ export class Chat {
       return;
     }
 
+    const effectiveDomainId = (domainId || '').trim() || resolveActiveDomainId();
+
     this.bubbleMessage('assistant', reaction);
 
     const screenplays = textsToScreenplay([reaction]);
@@ -634,7 +646,7 @@ export class Chat {
     this.ttsJobs.enqueue({
       screenplay: screenplays[0],
       streamIdx: this.currentStreamIdx,
-      domainId,
+      domainId: effectiveDomainId,
       bubbleToChat: false,
     });
   }
@@ -835,7 +847,8 @@ export class Chat {
     }
 
     message = normalizedMessage;
-    this.currentUserDomainId = domainId || this.currentUserDomainId || "default";
+    const effectiveDomainId = (domainId || this.currentUserDomainId || resolveActiveDomainId()).trim() || 'default';
+    this.currentUserDomainId = effectiveDomainId;
 
     console.time("performance_interrupting");
     console.debug("interrupting...");
@@ -863,17 +876,17 @@ export class Chat {
     // Fetch injected context from injection-tool (fail-open)
     const userTextForModel = amicaLife ? message : this.currentUserMessage;
     const userTextForInjection = this.buildInjectionUserText(userTextForModel, hasChronicleMarker);
-    const effectiveDomainId = domainId || undefined;
+    const injectionDomainId = effectiveDomainId || undefined;
 
     console.debug('[CHRONICLE] request', {
-      domainId: effectiveDomainId ?? 'default',
+      domainId: injectionDomainId ?? 'default',
       markerDetected: hasChronicleMarker,
       messageLength: userTextForModel.length,
     });
 
     const injected = await fetchInjectedContext(
       userTextForInjection,
-      effectiveDomainId,
+      injectionDomainId,
       sessionManager.getSessionId() || undefined
     );
 
@@ -910,7 +923,7 @@ export class Chat {
             this.ttsJobs.enqueue({
               screenplay: reactionScreenplay,
               streamIdx: this.currentStreamIdx,
-              domainId: effectiveDomainId,
+              domainId: injectionDomainId,
               bubbleToChat: false,
             });
           }
@@ -942,7 +955,7 @@ export class Chat {
         this.ttsJobs.enqueue({
           screenplay: failureReactionScreenplay,
           streamIdx: this.currentStreamIdx,
-          domainId: effectiveDomainId,
+          domainId: injectionDomainId,
           bubbleToChat: false,
         });
       }

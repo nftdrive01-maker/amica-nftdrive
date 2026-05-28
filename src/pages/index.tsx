@@ -75,7 +75,7 @@ import { chatHistoryStore, mapMessagesToHistoryEntries } from "@/features/chatHi
 import { ThoughtText } from "@/components/thoughtText";
 import { WaitingScreen } from "@/components/waitingScreen";
 import { acquireSession, sessionManager } from "@/lib/sessionManager";
-import { fetchPublicDomainOptions, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
+import { fetchPublicDomainOptions, getDomainVoiceConfig, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
 import { getPersistentUserId } from "@/lib/userIdentity";
 import { clearDomainAccessSession, hasDomainAccessSession } from '@/lib/domainAccessSession';
 
@@ -213,6 +213,7 @@ export default function Home() {
   const [selectedDomainGazeEnabled, setSelectedDomainGazeEnabled] = useState(true);
   const [selectedDomainLabel, setSelectedDomainLabel] = useState(() => config('injection_default_domain_label') || 'デフォルト');
   const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
+  const [effectiveTTSBackend, setEffectiveTTSBackend] = useState(() => config('tts_backend'));
   const [domainDisplayVersion, setDomainDisplayVersion] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isConnectionIndicatorExpanded, setIsConnectionIndicatorExpanded] = useState(true);
@@ -244,10 +245,9 @@ export default function Home() {
   });
 
   const currentSTTBackend = config('stt_backend');
-  const currentTTSBackend = config('tts_backend');
   const currentChatbotBackend = config('chatbot_backend');
   const currentSTTLabel = sttBackendLabels[currentSTTBackend] ?? currentSTTBackend;
-  const currentTTSLabel = ttsBackendLabels[currentTTSBackend] ?? currentTTSBackend;
+  const currentTTSLabel = ttsBackendLabels[effectiveTTSBackend] ?? effectiveTTSBackend;
   const currentChatbotLabel = chatbotBackendLabels[currentChatbotBackend] ?? currentChatbotBackend;
   const currentAIModel = (() => {
     switch (currentChatbotBackend) {
@@ -305,6 +305,45 @@ export default function Home() {
     setShowHistory(false);
     setShowMainMenu(false);
   }, [domainAuthDialogOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveEffectiveTTSBackend = async () => {
+      const fallbackBackend = config('tts_backend');
+      const domainId = (selectedDomainId || config('injection_default_domain') || 'default').trim();
+
+      if (!domainId) {
+        if (!cancelled) {
+          setEffectiveTTSBackend(fallbackBackend);
+        }
+        return;
+      }
+
+      try {
+        const domainVoiceConfig = await getDomainVoiceConfig(domainId);
+        if (!cancelled) {
+          setEffectiveTTSBackend(domainVoiceConfig.ttsBackend?.trim() || fallbackBackend);
+        }
+      } catch {
+        if (!cancelled) {
+          setEffectiveTTSBackend(fallbackBackend);
+        }
+      }
+    };
+
+    void resolveEffectiveTTSBackend();
+
+    const handleConfigUpdated = () => {
+      void resolveEffectiveTTSBackend();
+    };
+
+    window.addEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated);
+    };
+  }, [selectedDomainId]);
 
   useEffect(() => {
     amicaLife.checkSettingOff(!showSettings);
