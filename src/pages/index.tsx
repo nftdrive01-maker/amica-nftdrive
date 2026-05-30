@@ -58,7 +58,7 @@ import { Message, Role } from "@/features/chat/messages";
 import { ChatContext } from "@/features/chat/chatContext";
 import { AlertContext } from "@/features/alert/alertContext";
 
-import { CONFIG_UPDATED_EVENT, config, updateConfig } from '@/utils/config';
+import { CONFIG_UPDATED_EVENT, config, defaultConfig, updateConfig, updateConfigBatch } from '@/utils/config';
 import { isTauri } from '@/utils/isTauri';
 import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
@@ -68,6 +68,7 @@ import { HistoryPanel } from "@/components/historyPanel";
 import { ImageAvatar } from "@/components/imageAvatar";
 import { DefaultArkCoreBackground } from "@/components/defaultArkCoreBackground";
 import { DefaultArkCoreAvatar } from "@/components/defaultArkCoreAvatar";
+import { DomainLauncher } from '@/components/domainLauncher';
 
 import { TimestampedPrompt } from "@/features/amicaLife/eventHandler";
 import { handleChatLogs } from "@/features/externalAPI/externalAPI";
@@ -75,9 +76,10 @@ import { chatHistoryStore, mapMessagesToHistoryEntries } from "@/features/chatHi
 import { ThoughtText } from "@/components/thoughtText";
 import { WaitingScreen } from "@/components/waitingScreen";
 import { acquireSession, sessionManager } from "@/lib/sessionManager";
-import { fetchPublicDomainOptions, getDomainVoiceConfig, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
+import { fetchPublicAppSettings, fetchPublicDomainOptions, getDomainVoiceConfig, getServerAttachedPackDetails, syncServerChatHistory } from "@/lib/injectionClient";
 import { getPersistentUserId } from "@/lib/userIdentity";
 import { clearDomainAccessSession, hasDomainAccessSession } from '@/lib/domainAccessSession';
+import { buildUrl } from "@/utils/buildUrl";
 
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
@@ -122,6 +124,41 @@ const chatbotBackendLabels: Record<string, string> = {
   moshi: 'Moshi',
   openrouter: 'OpenRouter',
 };
+
+const VRM_STATUS_EVENT = 'amica:vrm-status';
+const AVATAR_STATUS_EVENT = 'amica:avatar-status';
+const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
+
+const LAUNCHER_DOMAIN_RESET_KEYS = [
+  'name',
+  'bg_url',
+  'bg_color',
+  'theme_color',
+  'vrm_enabled',
+  'vrm_url',
+  'vrm_hash',
+  'vrm_save_type',
+  'image_avatar_idle_url',
+  'image_avatar_talk_url',
+  'image_avatar_talk_interval_ms',
+  'tts_muted',
+  'amica_life_enabled',
+  'time_before_idle_sec',
+  'min_time_interval_sec',
+  'max_time_interval_sec',
+  'time_to_sleep_sec',
+  'stylebertvits2_model_id',
+  'stylebertvits2_style',
+] as const;
+
+function resolveCustomBackgroundColor(value: string): string {
+  const normalized = value.trim();
+  if (normalized === '' || normalized.toLowerCase() === 'transparent') {
+    return '';
+  }
+
+  return normalized;
+}
 
 function detectVRHeadset() {
   const userAgent = navigator.userAgent.toLowerCase();
@@ -215,6 +252,21 @@ export default function Home() {
   const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
   const [effectiveTTSBackend, setEffectiveTTSBackend] = useState(() => config('tts_backend'));
   const [domainDisplayVersion, setDomainDisplayVersion] = useState(0);
+  const [vrmDisplayState, setVrmDisplayState] = useState<'idle' | 'loading' | 'ready' | 'error'>(() => {
+    const hasVrmConfig = config('vrm_enabled') === 'true' && config('vrm_url').trim() !== '';
+    return hasVrmConfig ? 'loading' : 'idle';
+  });
+  const [avatarDisplayState, setAvatarDisplayState] = useState<'idle' | 'loading' | 'ready' | 'error'>(() => {
+    const hasVrmConfig = config('vrm_enabled') === 'true' && config('vrm_url').trim() !== '';
+    const hasImageAvatar =
+      config('image_avatar_idle_url').trim() !== '' ||
+      config('image_avatar_talk_url').trim() !== '';
+    return hasVrmConfig || hasImageAvatar ? 'loading' : 'ready';
+  });
+  const vrmConfigSnapshotRef = useRef(`${config('vrm_enabled')}::${config('vrm_url').trim()}`);
+  const avatarConfigSnapshotRef = useRef(
+    `${config('vrm_enabled')}::${config('vrm_url').trim()}::${config('image_avatar_idle_url').trim()}::${config('image_avatar_talk_url').trim()}`,
+  );
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isConnectionIndicatorExpanded, setIsConnectionIndicatorExpanded] = useState(true);
 
@@ -234,6 +286,9 @@ export default function Home() {
   const [sessionBlocked, setSessionBlocked] = useState(false);
   const [domainAuthDialogOpen, setDomainAuthDialogOpen] = useState(false);
   const [domainAccessPromptNonce, setDomainAccessPromptNonce] = useState(0);
+  const [launcherEnabled, setLauncherEnabled] = useState(() => config('injection_launcher_enabled') !== 'false');
+  const [launcherEntered, setLauncherEntered] = useState(() => config('injection_launcher_enabled') === 'false');
+  const [launcherStartingDomainId, setLauncherStartingDomainId] = useState<string | null>(null);
   const [attachedPackDetails, setAttachedPackDetails] = useState<{
     mcpServers: string[];
     knowledges: string[];
@@ -357,8 +412,8 @@ export default function Home() {
     setShowArbiusIntroduction(config("show_arbius_introduction") === 'true');
 
     const applyInitialBackground = async () => {
-      const bgColor = config("bg_color");
-      const bgUrl = config("bg_url");
+      const bgColor = resolveCustomBackgroundColor(config("bg_color"));
+      const bgUrl = config("bg_url").trim();
 
       if (bgColor !== '') {
         document.body.style.backgroundImage = '';
@@ -617,7 +672,81 @@ export default function Home() {
       return;
     }
 
+    let cancelled = false;
+
+    const loadPublicAppSettings = async () => {
+      const settings = await fetchPublicAppSettings();
+      if (cancelled) {
+        return;
+      }
+
+      setLauncherEnabled(settings.launcherEnabled);
+      setLauncherEntered(!settings.launcherEnabled);
+    };
+
+    void loadPublicAppSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const enterDomainFromLauncher = async (domainId: string) => {
+    if (launcherStartingDomainId) {
+      return;
+    }
+
+    setLauncherStartingDomainId(domainId);
+
+    try {
+      await updateConfigBatch(
+        LAUNCHER_DOMAIN_RESET_KEYS.map((key) => [key, defaultConfig(key)]),
+      );
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('amica_selected_domain_id', domainId);
+        window.dispatchEvent(new CustomEvent('amica:domain-changed', { detail: { domainId } }));
+      }
+
+      setSelectedDomainId(domainId);
+      setLauncherEntered(true);
+    } catch (error) {
+      setLauncherStartingDomainId(null);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleDomainApplied = (event: Event) => {
+      const customEvent = event as CustomEvent<{ domainId?: string }>;
+      if (!customEvent.detail?.domainId) {
+        return;
+      }
+
+      if (customEvent.detail.domainId === launcherStartingDomainId) {
+        setLauncherStartingDomainId(null);
+      }
+    };
+
+    window.addEventListener(DOMAIN_APPLIED_EVENT, handleDomainApplied as EventListener);
+
+    return () => {
+      window.removeEventListener(DOMAIN_APPLIED_EVENT, handleDomainApplied as EventListener);
+    };
+  }, [launcherStartingDomainId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     const syncSelectedDomain = (domainId?: string) => {
+      setVrmDisplayState('loading');
+      setAvatarDisplayState('loading');
       setSelectedDomainId(domainId || localStorage.getItem('amica_selected_domain_id') || config('injection_default_domain') || 'default');
       setDomainDisplayVersion((prev) => prev + 1);
     };
@@ -626,6 +755,9 @@ export default function Home() {
 
     const handleDomainChanged = (event: Event) => {
       const customEvent = event as CustomEvent<{ domainId?: string }>;
+      if (customEvent.detail?.domainId) {
+        setLauncherStartingDomainId(customEvent.detail.domainId);
+      }
       syncSelectedDomain(customEvent.detail?.domainId);
     };
 
@@ -675,9 +807,37 @@ export default function Home() {
         : customEvent.detail?.key
           ? [customEvent.detail.key]
           : [];
+      const hasDisplayKey = updatedKeys.some((key) => ['name', 'theme_color', 'bg_url', 'bg_color', 'vrm_enabled', 'vrm_url', 'image_avatar_idle_url', 'image_avatar_talk_url'].includes(key));
+      const hasVrmConfigKey = updatedKeys.some((key) => ['vrm_enabled', 'vrm_url'].includes(key));
+      const hasAvatarConfigKey = updatedKeys.some((key) => ['vrm_enabled', 'vrm_url', 'image_avatar_idle_url', 'image_avatar_talk_url'].includes(key));
 
-      if (updatedKeys.some((key) => ['name', 'theme_color', 'bg_url', 'bg_color', 'vrm_enabled', 'vrm_url', 'image_avatar_idle_url', 'image_avatar_talk_url'].includes(key))) {
+      if (hasDisplayKey) {
         setDomainDisplayVersion((prev) => prev + 1);
+      }
+
+      if (hasVrmConfigKey) {
+        const currentVrmEnabled = config('vrm_enabled');
+        const currentVrmUrl = config('vrm_url').trim();
+        const nextSnapshot = `${currentVrmEnabled}::${currentVrmUrl}`;
+
+        if (vrmConfigSnapshotRef.current !== nextSnapshot) {
+          vrmConfigSnapshotRef.current = nextSnapshot;
+          const hasVrmConfig = currentVrmEnabled === 'true' && currentVrmUrl !== '';
+          setVrmDisplayState(hasVrmConfig ? 'loading' : 'idle');
+        }
+      }
+
+      if (hasAvatarConfigKey) {
+        const currentVrmEnabled = config('vrm_enabled');
+        const currentVrmUrl = config('vrm_url').trim();
+        const currentImageIdleUrl = config('image_avatar_idle_url').trim();
+        const currentImageTalkUrl = config('image_avatar_talk_url').trim();
+        const nextSnapshot = `${currentVrmEnabled}::${currentVrmUrl}::${currentImageIdleUrl}::${currentImageTalkUrl}`;
+
+        if (avatarConfigSnapshotRef.current !== nextSnapshot) {
+          avatarConfigSnapshotRef.current = nextSnapshot;
+          setAvatarDisplayState('loading');
+        }
       }
     };
 
@@ -688,9 +848,97 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleVrmStatusChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ state?: 'idle' | 'loading' | 'ready' | 'error' }>;
+      const nextState = customEvent.detail?.state;
+      if (!nextState) {
+        return;
+      }
+
+      setVrmDisplayState(nextState);
+    };
+
+    window.addEventListener(VRM_STATUS_EVENT, handleVrmStatusChanged as EventListener);
+
+    return () => {
+      window.removeEventListener(VRM_STATUS_EVENT, handleVrmStatusChanged as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleAvatarStatusChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        state?: 'idle' | 'loading' | 'ready' | 'error';
+        assetType?: 'vrm' | 'image';
+        url?: string;
+      }>;
+      const nextState = customEvent.detail?.state;
+      const assetType = customEvent.detail?.assetType;
+      const eventUrl = customEvent.detail?.url?.trim() || '';
+      if (!nextState) {
+        return;
+      }
+
+      const currentVrmEnabled = config('vrm_enabled') === 'true';
+      const currentVrmUrl = config('vrm_url').trim();
+      const hasConfiguredVrm = currentVrmEnabled && currentVrmUrl !== '';
+      const currentImageIdleUrl = config('image_avatar_idle_url').trim();
+      const currentImageTalkUrl = config('image_avatar_talk_url').trim();
+      const hasConfiguredImageAvatar = currentImageIdleUrl !== '' || currentImageTalkUrl !== '';
+
+      if (hasConfiguredVrm) {
+        if (assetType !== 'vrm') {
+          return;
+        }
+
+        if (eventUrl && eventUrl !== buildUrl(currentVrmUrl)) {
+          return;
+        }
+
+        setAvatarDisplayState(nextState);
+        return;
+      }
+
+      if (hasConfiguredImageAvatar) {
+        if (assetType !== 'image') {
+          return;
+        }
+
+        if (eventUrl && eventUrl !== currentImageIdleUrl && eventUrl !== currentImageTalkUrl) {
+          return;
+        }
+
+        setAvatarDisplayState(nextState);
+        return;
+      }
+
+      if (assetType) {
+        return;
+      }
+
+      setAvatarDisplayState(nextState);
+    };
+
+    window.addEventListener(AVATAR_STATUS_EVENT, handleAvatarStatusChanged as EventListener);
+
+    return () => {
+      window.removeEventListener(AVATAR_STATUS_EVENT, handleAvatarStatusChanged as EventListener);
+    };
+  }, []);
+
   // 同時接続数制限: injection-tool が有効なときのみセッションを取得
   useEffect(() => {
     if (!showContent) return;
+    if (!launcherEntered) return;
     const enabled = config('injection_tool_enabled')?.toLowerCase() === 'true';
     if (!enabled) return;
     if (sessionManager.getSessionId()) return;
@@ -707,10 +955,11 @@ export default function Home() {
         setSessionBlocked(true);
       }
     });
-  }, [selectedDomainId, showContent]);
+  }, [launcherEntered, selectedDomainId, showContent]);
 
   useEffect(() => {
     if (!showContent) return;
+    if (!launcherEntered) return;
     if (domainAuthDialogOpen) return;
 
     let cancelled = false;
@@ -795,9 +1044,49 @@ export default function Home() {
       window.clearInterval(timerId);
       window.removeEventListener('focus', refreshAttachedPackDetails);
     };
-  }, [domainAuthDialogOpen, selectedDomainId, showContent]);
+  }, [domainAuthDialogOpen, launcherEntered, selectedDomainId, showContent]);
+
+  const hasConfiguredVrm = config("vrm_enabled") === "true" && config("vrm_url").trim() !== "";
+  const hasConfiguredImageAvatar =
+    config("image_avatar_idle_url").trim() !== "" || config("image_avatar_talk_url").trim() !== "";
+
+  useEffect(() => {
+    if (launcherStartingDomainId) {
+      return;
+    }
+
+    if (avatarDisplayState !== 'loading') {
+      return;
+    }
+
+    if (hasConfiguredVrm || hasConfiguredImageAvatar) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setAvatarDisplayState('ready');
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [avatarDisplayState, hasConfiguredImageAvatar, hasConfiguredVrm, launcherStartingDomainId]);
 
   if (!showContent) return <></>;
+
+  if (launcherEnabled && !launcherEntered) {
+    return (
+      <div className={clsx(m_plus_2.variable, montserrat.variable)}>
+        <DomainLauncher
+          selectedDomainId={selectedDomainId}
+          startingDomainId={launcherStartingDomainId}
+          onEnter={(domainId) => {
+            void enterDomainFromLauncher(domainId);
+          }}
+        />
+      </div>
+    );
+  }
 
   if (sessionBlocked) {
     const domainId = selectedDomainId || config('injection_default_domain') || 'default';
@@ -820,14 +1109,16 @@ export default function Home() {
     );
   }
 
-  const hasConfiguredVrm = config("vrm_enabled") === "true" && config("vrm_url").trim() !== "";
-  const hasConfiguredImageAvatar =
-    config("image_avatar_idle_url").trim() !== "" || config("image_avatar_talk_url").trim() !== "";
-  const showDefaultArkCoreAvatar = !hasConfiguredVrm && !hasConfiguredImageAvatar;
+  const showDefaultArkCoreAvatar =
+    (!hasConfiguredImageAvatar || avatarDisplayState === 'error') &&
+    (!hasConfiguredVrm || vrmDisplayState !== 'ready');
+  const showAvatarLoadingScreen =
+    launcherStartingDomainId !== null ||
+    (hasConfiguredVrm ? vrmDisplayState === 'loading' : avatarDisplayState === 'loading');
+  const hasConfiguredBackgroundColor = resolveCustomBackgroundColor(config("bg_color")) !== '';
   const showDefaultArkCoreBackground =
-    config("bg_url") === '' &&
-    config("bg_color") === '' &&
-    config("vrm_enabled") !== "true";
+    config("bg_url").trim() === '' &&
+    !hasConfiguredBackgroundColor;
 
   return (
     <div className={clsx(
@@ -881,6 +1172,26 @@ export default function Home() {
         onDomainAccessDialogOpenChange={setDomainAuthDialogOpen}
         domainAccessPromptNonce={domainAccessPromptNonce}
       />
+
+      {showAvatarLoadingScreen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/88 backdrop-blur-md">
+          <div className="mx-6 flex w-full max-w-lg flex-col items-center rounded-3xl border border-cyan-400/20 bg-slate-900/85 px-8 py-10 text-center shadow-2xl shadow-cyan-950/40">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-cyan-300" />
+            <div className="mt-6 text-xs font-semibold uppercase tracking-[0.35em] text-cyan-300/90">
+              AI Startup
+            </div>
+            <div className="mt-3 text-2xl font-semibold text-white">
+              AI を起動しています
+            </div>
+            <div className="mt-3 max-w-md text-sm leading-6 text-slate-300">
+              アバターと会話 UI の準備が完了するまで、そのままお待ちください。
+            </div>
+            <div className="mt-5 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300">
+              ドメイン: {selectedDomainLabel}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div
         className={clsx(
@@ -1028,6 +1339,23 @@ export default function Home() {
             }}
           >
             👀
+          </button>
+        )}
+
+        {launcherEnabled && (
+          <button
+            type="button"
+            className={clsx(
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              launcherEntered
+                ? "bg-slate-900/60 hover:bg-slate-800/80"
+                : "bg-sky-700/70 hover:bg-sky-600/80"
+            )}
+            title="ランチャーへ戻る"
+            aria-label="ランチャーへ戻る"
+            onClick={() => setLauncherEntered(false)}
+          >
+            <AcademicCapIcon className="h-5 w-5" />
           </button>
         )}
 

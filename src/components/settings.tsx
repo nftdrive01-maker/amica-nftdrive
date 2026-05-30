@@ -71,6 +71,7 @@ import { AmicaLifePage } from "./settings/AmicaLifePage";
 import { useVrmStoreContext } from "@/features/vrmStore/vrmStoreContext";
 import { OpenRouterSettings } from "./settings/OpenRouterSettingsPage";
 import { ExternalAPIPage } from "./settings/ExternalAPIPage";
+import { LauncherPage } from "./settings/LauncherPage";
 import { KokoroSettingsPage } from "./settings/KokoroSettingsPage";
 import { StyleBertVits2SettingsPage } from "./settings/StyleBertVits2SettingsPage";
 
@@ -193,6 +194,7 @@ export const Settings = ({
   const [reasoningEngineUrl, setReasoningEngineUrl] = useState(config("reasoning_engine_url"));
 
   const [externalApiEnabled, setExternalApiEnabled] = useState<boolean>(config("external_api_enabled") === 'true' ? true : false);
+  const [launcherEnabled, setLauncherEnabled] = useState<boolean>(config("injection_launcher_enabled") === 'true' ? true : false);
 
   const [name, setName] = useState(config("name"));
   const [systemPrompt, setSystemPrompt] = useState(config("system_prompt"));
@@ -450,7 +452,7 @@ export const Settings = ({
     switch (page) {
       case 'main_menu':
         return <MenuPage
-          keys={visibleSettingKeys(["appearance", "amica_life", "chatbot", "language", "tts", "stt", "vision", "developer", "external_api"])}
+          keys={visibleSettingKeys(["appearance", "amica_life", "chatbot", "launcher", "language", "tts", "stt", "vision", "developer", "external_api"])}
           menuClick={handleMenuClick} />;
 
       case 'appearance':
@@ -856,6 +858,13 @@ export const Settings = ({
         return <ExternalAPIPage
           externalApiEnabled={externalApiEnabled}
           setExternalApiEnabled={setExternalApiEnabled}
+          setSettingsUpdated={setSettingsUpdated}
+        />
+
+      case 'launcher':
+        return <LauncherPage
+          launcherEnabled={launcherEnabled}
+          setLauncherEnabled={setLauncherEnabled}
           setSettingsUpdated={setSettingsUpdated}
         />
 

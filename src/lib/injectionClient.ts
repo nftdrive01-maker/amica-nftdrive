@@ -12,11 +12,13 @@ import { getDomainAccessSession } from '@/lib/domainAccessSession';
 export type PublicDomainOption = {
   id: string;
   label: string;
+  description?: string;
   chronicleAttached?: boolean;
   accessControlEnabled?: boolean;
   mcpServerIds?: string[];
   knowledgeIds?: string[];
   bgUrl?: string;
+  headerImageUrl?: string;
   themeColor?: string;
   characterName?: string;
   vrmEnabled?: boolean;
@@ -41,8 +43,14 @@ export type PublicDomainOption = {
   gazeDebugUiEnabled?: boolean;
 };
 
+export type PublicAppSettings = {
+  launcherEnabled: boolean;
+};
+
 let _publicDomainOptionsCache: PublicDomainOption[] | null = null;
 let _publicDomainOptionsFetchPromise: Promise<PublicDomainOption[]> | null = null;
+let _publicAppSettingsCache: PublicAppSettings | null = null;
+let _publicAppSettingsFetchPromise: Promise<PublicAppSettings> | null = null;
 
 function buildDomainAccessHeaders(domainId?: string): Record<string, string> {
   const normalizedDomainId = String(domainId || '').trim();
@@ -572,6 +580,7 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
           .map((domain: any) => ({
             id: String(domain.id).trim(),
             label: String(domain.name || domain.label).trim(),
+            description: typeof domain.description === 'string' ? domain.description.trim() : '',
             chronicleAttached: Boolean(domain.chronicleAttached),
             accessControlEnabled: Boolean(domain.accessControlEnabled),
             mcpServerIds: Array.isArray(domain.mcpServerIds)
@@ -581,6 +590,7 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
               ? domain.knowledgeIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
               : [],
             bgUrl: typeof domain.bgUrl === 'string' ? domain.bgUrl.trim() : '',
+            headerImageUrl: typeof domain.headerImageUrl === 'string' ? domain.headerImageUrl.trim() : '',
             themeColor: typeof domain.themeColor === 'string' ? domain.themeColor.trim() : '',
             characterName: typeof domain.characterName === 'string' ? domain.characterName.trim() : '',
             vrmEnabled: typeof domain.vrmEnabled === 'boolean' ? domain.vrmEnabled : true,
@@ -637,9 +647,11 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
         const unique = new Map<string, {
           id: string;
           label: string;
+          description?: string;
           chronicleAttached?: boolean;
           accessControlEnabled?: boolean;
           bgUrl?: string;
+          headerImageUrl?: string;
           themeColor?: string;
           characterName?: string;
           vrmEnabled?: boolean;
@@ -684,6 +696,75 @@ export async function fetchPublicDomainOptions(): Promise<PublicDomainOption[]> 
     return [];
   } catch {
     return [];
+  }
+}
+
+export async function fetchPublicAppSettings(): Promise<PublicAppSettings> {
+  const fallback: PublicAppSettings = {
+    launcherEnabled:
+      typeof document !== 'undefined'
+        ? config('injection_launcher_enabled') !== 'false'
+        : process.env.NEXT_PUBLIC_INJECTION_LAUNCHER_ENABLED !== 'false',
+  };
+
+  try {
+    if (_publicAppSettingsCache) {
+      return _publicAppSettingsCache;
+    }
+
+    if (_publicAppSettingsFetchPromise) {
+      return _publicAppSettingsFetchPromise;
+    }
+
+    _publicAppSettingsFetchPromise = (async () => {
+      const enabled =
+        typeof document !== 'undefined'
+          ? config('injection_tool_enabled').toLowerCase() === 'true'
+          : process.env.NEXT_PUBLIC_INJECTION_TOOL_ENABLED !== 'false';
+
+      if (!enabled) {
+        _publicAppSettingsCache = fallback;
+        return fallback;
+      }
+
+      const url =
+        typeof document !== 'undefined'
+          ? config('injection_tool_url')
+          : process.env.NEXT_PUBLIC_INJECTION_TOOL_URL || '/api/injection';
+
+      if (!url) {
+        _publicAppSettingsCache = fallback;
+        return fallback;
+      }
+
+      const endpoint = buildEndpoint(url, '/api/public/settings/');
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        _publicAppSettingsCache = fallback;
+        return fallback;
+      }
+
+      const payload = await response.json().catch(() => null);
+      const next: PublicAppSettings = {
+        launcherEnabled:
+          typeof payload?.launcherEnabled === 'boolean'
+            ? payload.launcherEnabled
+            : fallback.launcherEnabled,
+      };
+
+      _publicAppSettingsCache = next;
+      return next;
+    })().finally(() => {
+      _publicAppSettingsFetchPromise = null;
+    });
+
+    return _publicAppSettingsFetchPromise;
+  } catch {
+    return fallback;
   }
 }
 

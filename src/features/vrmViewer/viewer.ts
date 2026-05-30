@@ -177,6 +177,7 @@ export class Viewer {
   private raycasterTempM = new THREE.Matrix4();
   private intersectsModel: THREE.Intersection[] = [];
   private intersectsRoom: THREE.Intersection[] = [];
+  private resizeHandler?: () => void;
 
   private jointMeshes1: THREE.Mesh[] = []; // controller1
   private jointMeshes2: THREE.Mesh[] = []; // controller2
@@ -215,10 +216,33 @@ export class Viewer {
 
   public async setup(canvas: HTMLCanvasElement) {
     if (this.isReady) {
-      // 既にセットアップ済みの場合は再初期化しない。
-      // canvasRef の deps 変化で複数回呼ばれても安全。
-      console.log("setup canvas: already initialized, skipping");
-      return;
+      if (this.renderer?.domElement === canvas) {
+        // 既に同じ canvas にセットアップ済みの場合は再初期化しない。
+        console.log("setup canvas: already initialized, skipping");
+        return;
+      }
+
+      console.log("setup canvas: reinitializing for a new canvas");
+      this.renderer?.setAnimationLoop(null);
+      this.cameraControls?.dispose();
+      if (this.resizeHandler) {
+        window.removeEventListener("resize", this.resizeHandler);
+        this.resizeHandler = undefined;
+      }
+      if (this.room?.room && this.scene) {
+        this.unloadRoom();
+      }
+      if (this.model?.vrm && this.scene) {
+        this.unloadVRM();
+      }
+      this.model = undefined;
+      this.room = undefined;
+      this.camera = undefined;
+      this.cameraControls = undefined;
+      this.scene = undefined;
+      this.renderer?.dispose();
+      this.renderer = undefined;
+      this.isReady = false;
     }
     console.log("setup canvas");
     const parentElement = canvas.parentElement;
@@ -572,9 +596,10 @@ export class Viewer {
     //   this.newParticleInstance();
     // });
 
-    window.addEventListener("resize", () => {
+    this.resizeHandler = () => {
       this.resize();
-    });
+    };
+    window.addEventListener("resize", this.resizeHandler);
 
     this.isReady = true;
     renderer.setAnimationLoop(() => {

@@ -25,6 +25,7 @@ import {
   SunIcon,
   CogIcon,
   ArrowTopRightOnSquareIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 import logo from '/public/logo.png';
@@ -146,6 +147,7 @@ export function getIconFromPage(page: string): JSX.Element {
     case 'stt':                 return <PencilIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'vision':              return <EyeIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'external_api':        return <ArrowTopRightOnSquareIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
+    case 'launcher':            return <HomeIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
     case 'reset_settings':      return <PowerIcon className="h-5 w-5 flex-none text-red-500" aria-hidden="true" />;
     case 'developer':           return <CommandLineIcon className="h-5 w-5 flex-none text-green-500" aria-hidden="true" />;
     case 'community':           return <RocketLaunchIcon className="h-5 w-5 flex-none text-gray-800" aria-hidden="true" />;
@@ -204,6 +206,7 @@ function getLabelFromPage(page: string): string {
     case 'stt':                 return t('Speech-to-text');
     case 'vision':              return t('Vision');
     case 'external_api':        return t('External API');
+    case 'launcher':            return t('Launcher');
     case 'reset_settings':      return t('Reset Settings');
     case 'developer':           return t('Developer');
     case 'community':           return t('Community');

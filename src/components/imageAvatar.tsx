@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { CONFIG_UPDATED_EVENT, config } from "@/utils/config";
 
+const AVATAR_STATUS_EVENT = 'amica:avatar-status';
+
+function dispatchAvatarStatus(state: 'idle' | 'loading' | 'ready' | 'error', assetType: 'image', url?: string, message?: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(AVATAR_STATUS_EVENT, {
+    detail: { state, assetType, url, message },
+  }));
+}
+
 type ImageAvatarProps = {
   speaking: boolean;
 };
@@ -55,6 +67,34 @@ export function ImageAvatar({ speaking }: ImageAvatarProps) {
     }
     return isTalkFrame ? talkUrl : idleUrl;
   }, [canAnimate, idleUrl, isTalkFrame, talkUrl]);
+
+  useEffect(() => {
+    if (vrmEnabled || !idleUrl) {
+      return;
+    }
+
+    let cancelled = false;
+    dispatchAvatarStatus('loading', 'image', idleUrl);
+
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) {
+        return;
+      }
+      dispatchAvatarStatus('ready', 'image', idleUrl);
+    };
+    img.onerror = () => {
+      if (cancelled) {
+        return;
+      }
+      dispatchAvatarStatus('error', 'image', idleUrl, `Failed to load image avatar: ${idleUrl}`);
+    };
+    img.src = idleUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [idleUrl, vrmEnabled]);
 
   if (vrmEnabled || !currentSrc) {
     return null;

@@ -19,6 +19,8 @@ import { GLTFAnalyzer } from '@/utils/gltfAnalyzer';
 import { TransparencyOptimizer, checkAndOptimizeTransparency } from '@/utils/transparencyOptimizer';
 import { config } from "@/utils/config";
 
+type VrmMaterialMode = 'mtoon' | 'mtoon_node' | 'meshtoon' | 'basic' | 'depth' | 'normal';
+
 /**
  * 3Dキャラクターを管理するクラス
  */
@@ -38,81 +40,54 @@ export class Model {
     this._lipSync = new LipSync(new AudioContext());
   }
 
-  public async loadVRM(
+  private async resolveMaterialType(materialMode: VrmMaterialMode): Promise<any> {
+    switch (materialMode) {
+      case 'mtoon':
+        return MToonMaterial;
+      case 'mtoon_node': {
+        // @ts-ignore
+        const { MToonNodeMaterial } = await import("@pixiv/three-vrm/nodes");
+        return MToonNodeMaterial;
+      }
+      case 'meshtoon':
+        return THREE.MeshToonMaterial;
+      case 'basic':
+        return THREE.MeshBasicMaterial;
+      case 'depth':
+        return THREE.MeshDepthMaterial;
+      case 'normal':
+        return THREE.MeshNormalMaterial;
+      default:
+        throw new Error(`Unsupported VRM material mode: ${materialMode}`);
+    }
+  }
+
+  private getMaterialLoadFallbacks(preferredMode: VrmMaterialMode): VrmMaterialMode[] {
+    const fallbackOrder: VrmMaterialMode[] = [preferredMode];
+
+    if (preferredMode !== 'basic') {
+      fallbackOrder.push('basic');
+    }
+
+    if (preferredMode !== 'meshtoon') {
+      fallbackOrder.push('meshtoon');
+    }
+
+    return Array.from(new Set(fallbackOrder));
+  }
+
+  private async loadVRMWithMaterialMode(
     url: string,
     setLoadingProgress: (progress: string) => void,
+    materialMode: VrmMaterialMode,
   ): Promise<void> {
     const loader = new GLTFLoader();
-    /*
-    const loader = new OptimizedGLTFLoader({
-      // Texture optimizations
-      skipTextures: true,          // Skip loading textures completely
-      maxTextureSize: 512,         // Maximum texture size
-      generateMipmaps: false,      // Disable mipmaps
-      
-      // Geometry optimizations
-      skipDraco: true,            // Skip Draco decoder setup
-      preserveIndices: false,     // Remove index buffers
-      
-      // Animation/Material optimizations
-      skipAnimations: true,       // Skip loading animations
-      simplifyMaterials: true,    // Use simplified materials
-      disableNormalMaps: true,    // Disable normal maps
-      
-      // Performance optimizations
-      disposeSourceData: true,    // Clear source data after load
-      
-      // Optional callbacks for fine-tuning
-      onMesh: (mesh) => {
-        // Custom mesh optimizations
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-      },
-      onMaterial: (material) => {
-        // Custom material optimizations
-        if (material instanceof THREE.MeshStandardMaterial) {
-          material.envMapIntensity = 0;
-        }
-      },
-      onTexture: (texture) => {
-        // Custom texture optimizations
-        texture.encoding = THREE.LinearEncoding;
-      },
-    });
-    */
 
     // used for debug rendering
     const helperRoot = new THREE.Group();
     helperRoot.renderOrder = 10000;
 
-    // the type of material to use
-    // should usually be MToonMaterial
-    let materialType: any;
-    switch (config("mtoon_material_type")) {
-      case "mtoon":
-        materialType = MToonMaterial;
-        break;
-      case "mtoon_node":
-        // @ts-ignore
-        const { MToonNodeMaterial } = await import("@pixiv/three-vrm/nodes");
-        materialType = MToonNodeMaterial;
-        break;
-      case "meshtoon":
-        materialType = THREE.MeshToonMaterial;
-        break;
-      case "basic":
-        materialType = THREE.MeshBasicMaterial;
-        break;
-      case "depth":
-        materialType = THREE.MeshDepthMaterial;
-        break;
-      case "normal":
-        materialType = THREE.MeshNormalMaterial;
-        break;
-      default:
-        console.error("mtoon_material_type not found");
-        break;
-    }
+    const materialType = await this.resolveMaterialType(materialMode);
 
     if (config("use_webgpu") === "true") {
       // create a WebGPU compatible MToonMaterialLoaderPlugin
@@ -140,43 +115,11 @@ export class Model {
       loader.load(
         url,
         async (gltf) => {
-          // Temp Disable : WebXR
-          // setLoadingProgress("Processing VRM");
-
-          /*
-          {
-            const analyzer = new GLTFAnalyzer();
-            const stats = analyzer.analyzeModel(gltf);
-            console.log('Model Statistics:', stats);
-            const suggestions = analyzer.suggestOptimizations(stats);
-            console.log('Optimization Suggestions:', suggestions);
-          }
-          {
-            // Or for more control:
-            const optimizer = new TransparencyOptimizer();
-            const stats = optimizer.analyzeTransparency(gltf);
-            console.log('Transparency analysis:', stats);
-            // Check for issues
-            const issues = optimizer.logTransparencyIssues();
-            console.log('Transparency issues:', issues);
-
-            // Apply optimizations
-            optimizer.optimizeTransparency(gltf, {
-              disableTransparency: true,     // Completely disable all transparency
-              minAlphaThreshold: 0.9,        // Convert nearly opaque materials to fully opaque
-              convertToAlphaTest: false,      // Convert transparency to alphaTest where possible
-              alphaTestThreshold: 0.5        // Threshold for alphaTest conversion
-            });
-          }
-          */
-
           const vrm = (this.vrm = gltf.userData.vrm);
           vrm.scene.name = "VRMRoot";
 
           VRMUtils.removeUnnecessaryVertices(gltf.scene);
           VRMUtils.removeUnnecessaryJoints(gltf.scene);
-
-          // await downscaleModelTextures(gltf, 128);
 
           const mtoonDebugMode = config("mtoon_debug_mode");
           vrm.scene.traverse((obj: any) => {
@@ -199,42 +142,58 @@ export class Model {
             }
           });
 
-          // this.setTransparency(0.5);
-
           if (config("debug_gfx") === "true") {
             vrm.scene.add(helperRoot);
           }
 
-          // TODO this causes helperRoot to be rendered to side
-          // VRMUtils.rotateVRM0(vrm);
-          // hacky fix
           if (vrm.meta?.metaVersion === "0") {
             vrm.scene.rotation.y = Math.PI;
             helperRoot.rotation.y = Math.PI;
           }
 
           this.mixer = new THREE.AnimationMixer(vrm.scene);
-
           this.emoteController = new EmoteController(
             vrm,
             this._lookAtTargetParent,
           );
-
           this.proceduralAnimation = new ProceduralAnimation(vrm);
 
           resolve();
         },
-        (xhr) => {
+        () => {
           // Temp Disable : WebXR
-          // setLoadingProgress(
-          //   `${Math.floor((xhr.loaded / xhr.total) * 10000) / 100}% loaded`,
-          // );
+          // setLoadingProgress(`${Math.floor((xhr.loaded / xhr.total) * 10000) / 100}% loaded`);
         },
         (error) => {
           reject(error);
         },
       );
     });
+  }
+
+  public async loadVRM(
+    url: string,
+    setLoadingProgress: (progress: string) => void,
+  ): Promise<void> {
+    const preferredMode = (config("mtoon_material_type") as VrmMaterialMode) || 'mtoon';
+    const materialModes = this.getMaterialLoadFallbacks(preferredMode);
+    let lastError: unknown;
+
+    for (const materialMode of materialModes) {
+      try {
+        await this.loadVRMWithMaterialMode(url, setLoadingProgress, materialMode);
+        if (materialMode !== preferredMode) {
+          console.warn(`VRM material fallback applied: ${preferredMode} -> ${materialMode}`);
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+        console.warn(`VRM load failed with material mode: ${materialMode}`, error);
+        this.unLoadVrm();
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to load VRM with all material fallbacks');
   }
 
   public setTransparency(opacity: number) {

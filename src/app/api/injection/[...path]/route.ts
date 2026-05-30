@@ -23,6 +23,7 @@ const ALLOWED_ROUTE_PATTERNS: Array<{
   { method: 'GET', pattern: /^health$/ },
   { method: 'POST', pattern: /^intercept$/ },
   { method: 'GET', pattern: /^public\/domains$/ },
+  { method: 'GET', pattern: /^public\/settings$/ },
   { method: 'GET', pattern: /^public\/pronunciations$/ },
   { method: 'POST', pattern: /^public\/chat-history$/ },
   { method: 'POST', pattern: /^public\/domain-access\/login$/ },
@@ -78,7 +79,10 @@ function maybeRewritePublicDomainsPayload(params: { path: string[] }, payload: a
     domains: payload.domains.map((domain: any) => ({
       ...domain,
       bgUrl: rewriteAssetUrlForBff(domain?.bgUrl),
+      headerImageUrl: rewriteAssetUrlForBff(domain?.headerImageUrl),
       vrmUrl: rewriteAssetUrlForBff(domain?.vrmUrl),
+      imageAvatarIdleUrl: rewriteAssetUrlForBff(domain?.imageAvatarIdleUrl),
+      imageAvatarTalkUrl: rewriteAssetUrlForBff(domain?.imageAvatarTalkUrl),
     })),
   };
 }

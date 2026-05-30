@@ -65,6 +65,8 @@ const DEFAULT_GAZE_GREETINGS = [
   '目が合いましたね。今日は何をお手伝いしましょうか？',
 ];
 
+const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
+
 const sttBackendLabels: Record<string, string> = {
   none: 'None',
   whisper_browser: 'Whisper (Browser)',
@@ -217,6 +219,7 @@ export default function MessageInput({
     stylebertvits2Style: config("stylebertvits2_style"),
   });
   const appliedDomainConfigRef = useRef<string | null>(null);
+  const domainApplyRequestIdRef = useRef(0);
 
   useEffect(() => {
     const migrateLegacyAssetConfig = async () => {
@@ -595,6 +598,7 @@ export default function MessageInput({
     domain: DomainOption | undefined,
     options?: { forceReloadVrm?: boolean },
   ) => {
+    const requestId = ++domainApplyRequestIdRef.current;
     const baseline = initialDomainConfigRef.current;
     const previousVrmUrl = config('vrm_url');
     const nextVrmEnabled = domain?.vrmEnabled ?? true;
@@ -602,7 +606,9 @@ export default function MessageInput({
     const nextThemeColor = domain?.themeColor?.trim() || baseline.themeColor;
     const normalizedBaselineBgUrl = toRuntimeAssetUrl(baseline.bgUrl || '');
     const normalizedBaselineVrmUrl = toRuntimeAssetUrl(baseline.vrmUrl || '');
-    const requestedBgUrl = toRuntimeAssetUrl(domain?.bgUrl?.trim() || normalizedBaselineBgUrl);
+    const requestedBgUrl = domain
+      ? toRuntimeAssetUrl(domain.bgUrl?.trim() || '')
+      : normalizedBaselineBgUrl;
     const requestedVrmUrl = toRuntimeAssetUrl(domain?.vrmUrl?.trim() || normalizedBaselineVrmUrl);
     let resolvedBgUrl = requestedBgUrl;
     let resolvedVrmUrl = requestedVrmUrl;
@@ -641,6 +647,21 @@ export default function MessageInput({
     const nextModelId = domain?.stylebertvits2ModelId?.trim() || baseline.stylebertvits2ModelId;
     const nextStyle = domain?.stylebertvits2Style?.trim() || baseline.stylebertvits2Style;
 
+    if (typeof document !== 'undefined' && domain?.bgUrl?.trim()) {
+      const bgOk = await checkImageAvailable(requestedBgUrl);
+      if (requestId !== domainApplyRequestIdRef.current) {
+        return;
+      }
+
+      if (!bgOk) {
+        resolvedBgUrl = '';
+        alert.warning(
+          '背景画像の読み込みに失敗しました',
+          `ドメイン「${domain.label}」の背景画像を読み込めなかったため、デフォルト背景へ戻しました。`
+        );
+      }
+    }
+
     const configEntries: Array<[string, string]> = [
       ['name', nextName],
       ['bg_url', resolvedBgUrl],
@@ -659,22 +680,18 @@ export default function MessageInput({
       ['time_to_sleep_sec', String(nextTimeToSleepSec)],
       ['stylebertvits2_model_id', nextModelId],
       ['stylebertvits2_style', nextStyle],
+      ['tts_muted', nextTtsMuted ? 'true' : 'false'],
     ];
 
-    configEntries.push(['tts_muted', nextTtsMuted ? 'true' : 'false']);
-
-    if (typeof document !== 'undefined' && domain?.bgUrl?.trim()) {
-      const bgOk = await checkImageAvailable(requestedBgUrl);
-      if (!bgOk) {
-        resolvedBgUrl = normalizedBaselineBgUrl;
-        alert.warning(
-          '背景画像の読み込みに失敗しました',
-          `ドメイン「${domain.label}」の背景画像を読み込めなかったため、デフォルト背景へ戻しました。`
-        );
-      }
+    if (requestId !== domainApplyRequestIdRef.current) {
+      return;
     }
 
     await updateConfigBatch(configEntries);
+
+    if (requestId !== domainApplyRequestIdRef.current) {
+      return;
+    }
 
     if (typeof document !== 'undefined') {
       if (resolvedBgUrl) {
@@ -693,40 +710,15 @@ export default function MessageInput({
       pendingVrmUrlRef.current = resolvedVrmUrl;
     }
 
-    if (nextVrmEnabled && viewer.isReady && resolvedVrmUrl && (options?.forceReloadVrm || previousVrmUrl !== resolvedVrmUrl)) {
-      try {
-        await viewer.loadVrm(toRenderableUrl(resolvedVrmUrl), () => {});
-        // VrmViewer の lastLoadedUrlRef と同期して二重ロードを防ぐ
-        window.dispatchEvent(new CustomEvent('amica:vrm-externally-loaded', { detail: { url: toRenderableUrl(resolvedVrmUrl) } }));
-      } catch (error) {
-        console.error('Failed to switch VRM for selected domain:', error);
-
-        const fallbackVrmUrl = normalizedBaselineVrmUrl;
-        resolvedVrmUrl = fallbackVrmUrl;
-        resolvedVrmHash = baseline.vrmHash;
-        resolvedVrmSaveType = baseline.vrmSaveType;
-
-        await Promise.all([
-          updateConfig('vrm_url', resolvedVrmUrl),
-          updateConfig('vrm_hash', resolvedVrmHash),
-          updateConfig('vrm_save_type', resolvedVrmSaveType),
-        ]);
-
-        alert.warning(
-          'VRMの読み込みに失敗しました',
-          `ドメイン「${domain?.label ?? domain?.id ?? 'unknown'}」のVRMを読み込めなかったため、デフォルトVRMへ戻しました。`
-        );
-
-        if (nextVrmEnabled && viewer.isReady && fallbackVrmUrl && (options?.forceReloadVrm || previousVrmUrl !== fallbackVrmUrl)) {
-          try {
-            await viewer.loadVrm(toRenderableUrl(fallbackVrmUrl), () => {});
-            window.dispatchEvent(new CustomEvent('amica:vrm-externally-loaded', { detail: { url: toRenderableUrl(fallbackVrmUrl) } }));
-          } catch (fallbackError) {
-            console.error('Failed to load fallback VRM:', fallbackError);
-          }
-        }
-      }
+    if (typeof window !== 'undefined' && domain?.id) {
+      window.dispatchEvent(new CustomEvent(DOMAIN_APPLIED_EVENT, {
+        detail: { domainId: domain.id },
+      }));
     }
+
+    // VRM の実ロードは VrmViewer が config を監視して一元管理する。
+    // ここで直接 viewer.loadVrm() を呼ぶと loading/ready 状態が二重化して、
+    // ローディング画面の早期終了や再表示を引き起こす。
   }, [alert, checkImageAvailable, viewer]);
 
   // selectedDomain を ref で保持し、callback の依存から除外することで
@@ -753,6 +745,22 @@ export default function MessageInput({
     setDomainAccessPasswordVisible(false);
     setDomainAccessError('');
   }, []);
+
+  const ensureDomainAccessOrPrompt = useCallback((domainId: string) => {
+    const normalizedDomainId = String(domainId || '').trim();
+    if (!normalizedDomainId) {
+      return true;
+    }
+
+    const domain = domainOptions.find((item) => item.id === normalizedDomainId);
+    if (!domain?.accessControlEnabled || hasDomainAccessSession(normalizedDomainId)) {
+      return true;
+    }
+
+    openDomainAccessDialog(domain);
+    setDomainMenuOpen(false);
+    return false;
+  }, [domainOptions, openDomainAccessDialog]);
 
   const closeDomainAccessDialog = useCallback((dismissCurrentDomain: boolean) => {
     if (dismissCurrentDomain && domainAccessDialogDomain) {
@@ -859,26 +867,22 @@ export default function MessageInput({
     void applyDomainOverrides(domain);
   }, [applyDomainOverrides, domainOptions, selectedDomain, viewer]);
 
-  // viewer.isReady のポーリング: pendingVrmUrl があり viewer が ready になったら再適用
+  // viewer.isReady のポーリング: pendingVrmUrl は viewer 準備前の印としてだけ使う。
+  // 実際の VRM 読み込みは VrmViewer 側が canvasReady 後に現在 config を見て行うため、
+  // ここでドメイン設定を再適用すると no-op の config 更新だけが走って
+  // ローディング状態を再点火してしまう。
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (!viewer.isReady || !pendingVrmUrlRef.current) {
         return;
       }
       clearInterval(intervalId);
-      const pendingUrl = pendingVrmUrlRef.current;
       pendingVrmUrlRef.current = null;
-      // appliedDomainConfigRef をリセットせず、直接 VRM だけロードする
-      // (設定は既に applyDomainOverrides で書き込み済みのため)
-      const domain = domainOptions.find((item) => item.id === selectedDomainRef.current);
-      if (domain && (domain.vrmEnabled ?? true) && pendingUrl) {
-        void viewer.loadVrm(toRenderableUrl(pendingUrl), () => {});
-      }
     }, 500);
 
     return () => clearInterval(intervalId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewer, domainOptions]);
+  }, [viewer]);
 
   const refreshDomainOptions = useCallback(async (preferCurrent: boolean) => {
     const defaultDomainId = config("injection_default_domain");
@@ -1088,6 +1092,11 @@ export default function MessageInput({
 
     if (config("autosend_from_mic") === 'true') {
       if (!wakeWordEnabled || bot.isAwake()) {
+        if (!ensureDomainAccessOrPrompt(selectedDomain)) {
+          setUserMessage(text);
+          console.timeEnd('performance_transcribe');
+          return;
+        }
         bot.receiveMessageFromUser(text, false, selectedDomain);
       } else {
         setUserMessage(text);
@@ -1630,6 +1639,10 @@ export default function MessageInput({
   }, [whisperCppOutput]);
 
   function clickedSendButton() {
+    if (!ensureDomainAccessOrPrompt(selectedDomain)) {
+      return;
+    }
+
     const messageToSend = chronicleEnabledForInput ? `[[USE_CHRONICLE]] ${userMessage}` : userMessage;
     bot.receiveMessageFromUser(messageToSend, false, selectedDomain);
     // only if we are using non-VAD mode should we focus on the input

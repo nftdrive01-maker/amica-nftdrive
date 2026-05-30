@@ -76,7 +76,21 @@ export const VrmStoreProvider = ({ children }: PropsWithChildren<{}>): JSX.Eleme
     }, [configInitialized]);
 
     const getCurrentVrm = useCallback(() => {
-        return config('vrm_save_type') == 'local' ? loadedVrmList.find(vrm => vrm.getHash() == config('vrm_hash') ) : loadedVrmList.find(vrm => vrm.url == config('vrm_url') );
+        if (config('vrm_save_type') == 'local') {
+            return loadedVrmList.find((vrm) => vrm.getHash() == config('vrm_hash'));
+        }
+
+        const configuredUrl = config('vrm_url').trim();
+        if (!configuredUrl) {
+            return undefined;
+        }
+
+        const existingWebVrm = loadedVrmList.find((vrm) => vrm.url == configuredUrl);
+        if (existingWebVrm) {
+            return existingWebVrm;
+        }
+
+        return new VrmData(configuredUrl, configuredUrl, '/vrm/thumb-placeholder.jpg', 'web');
     }, [loadedVrmList]);
 
     const contextValue = useMemo(() => ({

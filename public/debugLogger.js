@@ -2,6 +2,15 @@ if (typeof window !== "undefined") {
   if(! window.error_handler_installed) {
     window.error_handler_logs = [];
 
+    const shouldSuppressLog = (name, argsLike) => {
+      if (name !== 'info') {
+        return false;
+      }
+
+      const firstArg = argsLike?.[0];
+      return typeof firstArg === 'string' && firstArg.includes('Created TensorFlow Lite XNNPACK delegate for CPU');
+    };
+
     const handler = ((old) => ({
       get: (_, name) => {
         function passf() {
@@ -9,6 +18,10 @@ if (typeof window !== "undefined") {
         }
 
         function logf() {
+          if (shouldSuppressLog(name, arguments)) {
+            return;
+          }
+
           const logEntry = {
             type: name,
             ts: +new Date(),
