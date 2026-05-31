@@ -45,6 +45,8 @@ export type PublicDomainOption = {
 
 export type PublicAppSettings = {
   launcherEnabled: boolean;
+  termsOfUseUrl: string;
+  privacyPolicyUrl: string;
 };
 
 let _publicDomainOptionsCache: PublicDomainOption[] | null = null;
@@ -705,6 +707,8 @@ export async function fetchPublicAppSettings(): Promise<PublicAppSettings> {
       typeof document !== 'undefined'
         ? config('injection_launcher_enabled') !== 'false'
         : process.env.NEXT_PUBLIC_INJECTION_LAUNCHER_ENABLED !== 'false',
+    termsOfUseUrl: '',
+    privacyPolicyUrl: '',
   };
 
   try {
@@ -754,6 +758,14 @@ export async function fetchPublicAppSettings(): Promise<PublicAppSettings> {
           typeof payload?.launcherEnabled === 'boolean'
             ? payload.launcherEnabled
             : fallback.launcherEnabled,
+        termsOfUseUrl:
+          typeof payload?.termsOfUseUrl === 'string'
+            ? payload.termsOfUseUrl.trim()
+            : fallback.termsOfUseUrl,
+        privacyPolicyUrl:
+          typeof payload?.privacyPolicyUrl === 'string'
+            ? payload.privacyPolicyUrl.trim()
+            : fallback.privacyPolicyUrl,
       };
 
       _publicAppSettingsCache = next;

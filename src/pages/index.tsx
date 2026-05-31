@@ -14,6 +14,7 @@ import {
   Bars3Icon,
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
+  ChevronLeftIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
@@ -21,6 +22,7 @@ import {
   CodeBracketSquareIcon,
   CubeIcon,
   CubeTransparentIcon,
+  InformationCircleIcon,
   LanguageIcon,
   ShareIcon,
   SpeakerWaveIcon,
@@ -129,6 +131,261 @@ const VRM_STATUS_EVENT = 'amica:vrm-status';
 const AVATAR_STATUS_EVENT = 'amica:avatar-status';
 const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
 
+const LICENSE_NOTICES = [
+  {
+    name: 'Amica',
+    license: 'MIT',
+    copyright: 'Copyright (c) 2023 Semper AI, pixiv Inc.',
+  },
+  {
+    name: 'Next.js',
+    license: 'MIT',
+  },
+  {
+    name: 'React',
+    license: 'MIT',
+  },
+  {
+    name: 'Three.js',
+    license: 'MIT',
+  },
+  {
+    name: '@pixiv/three-vrm',
+    license: 'MIT',
+  },
+  {
+    name: '@headlessui/react',
+    license: 'MIT',
+  },
+  {
+    name: '@heroicons/react',
+    license: 'MIT',
+  },
+  {
+    name: '@tabler/icons-react',
+    license: 'MIT',
+  },
+  {
+    name: 'wanakana',
+    license: 'MIT',
+  },
+  {
+    name: '@ducanh2912/next-pwa',
+    license: 'MIT',
+  },
+  {
+    name: '@mediapipe/tasks-vision',
+    license: 'Apache-2.0',
+  },
+] as const;
+
+const FONT_LICENSE_NOTICES = [
+  {
+    name: 'Google Fonts: M PLUS 2',
+    license: 'SIL Open Font License 1.1',
+  },
+  {
+    name: 'Google Fonts: Montserrat',
+    license: 'SIL Open Font License 1.1',
+  },
+] as const;
+
+const AUDIO_LICENSE_SECTIONS = {
+  engines: [
+    {
+      name: 'Style-Bert-VITS2',
+      license: 'AGPL-3.0',
+      description: 'Copyright (c) Style-Bert-VITS2 Contributors',
+      url: 'https://github.com/litagin02/Style-Bert-VITS2',
+    },
+    {
+      name: 'JP-Extra',
+      license: 'AGPL-3.0',
+      description: '日本語向け学習済みベースモデル',
+      url: 'https://huggingface.co/litagin/Style-Bert-VITS2-2.0-base-JP-Extra',
+    },
+    {
+      name: 'Piper',
+      license: 'MIT',
+      description: '利用する音声モデルのライセンスは各モデル配布元に従います。',
+      url: 'https://github.com/rhasspy/piper',
+    },
+  ],
+  models: [
+    {
+      name: 'yume-mirai-v0.1.0',
+      description: 'NFTDrive が独自に作成した学習済み音声モデルです。',
+      copyright: 'Copyright © NFTDrive',
+    },
+    {
+      name: 'amitaro',
+      description: 'Voice Source: あみたろの声素材工房',
+      provider: '学習済みモデル提供: Style-Bert-VITS2 Project',
+    },
+    {
+      name: 'jvnv-F1-jp',
+      license: 'CC BY-SA 4.0',
+      description: 'JVNVコーパスを利用したサンプル音声モデルです。',
+    },
+    {
+      name: 'jvnv-F2-jp',
+      license: 'CC BY-SA 4.0',
+      description: 'JVNVコーパスを利用したサンプル音声モデルです。',
+    },
+    {
+      name: 'jvnv-M1-jp',
+      license: 'CC BY-SA 4.0',
+      description: 'JVNVコーパスを利用したサンプル音声モデルです。',
+    },
+    {
+      name: 'jvnv-M2-jp',
+      license: 'CC BY-SA 4.0',
+      description: 'JVNVコーパスを利用したサンプル音声モデルです。',
+    },
+  ],
+  usage:
+    'JVNVコーパス由来モデルおよび各音声モデルの利用条件は、それぞれの配布元ライセンスに従います。Style-Bert-VITS2 および JP-Extra は AGPL-3.0 ライセンスに基づき提供され、Piper で利用する音声モデルのライセンスは各モデル配布元に従います。',
+  acknowledgment:
+    'Ark-i は多数のオープンソースソフトウェアおよびコミュニティによって支えられています。開発者およびコミュニティの皆様に深く感謝いたします。',
+} as const;
+
+type InformationView = 'menu' | 'terms' | 'privacy' | 'about' | 'license';
+
+const INFORMATION_MENU_ITEMS = [
+  {
+    id: 'terms',
+    title: '利用規約',
+    summary: 'ご利用前に確認いただきたい基本条件です。',
+  },
+  {
+    id: 'privacy',
+    title: 'プライバシー',
+    summary: '会話や端末情報の取り扱いに関する案内です。',
+  },
+  {
+    id: 'about',
+    title: 'About',
+    summary: 'Amica / Ark-i の概要と構成について記載します。',
+  },
+  {
+    id: 'license',
+    title: 'ライセンス',
+    summary: 'OSS、音声モデル、フォントのライセンス情報です。',
+  },
+] as const satisfies ReadonlyArray<{
+  id: Exclude<InformationView, 'menu'>;
+  title: string;
+  summary: string;
+}>;
+
+const INFORMATION_COPY = {
+  terms: {
+    eyebrow: 'Terms of Use',
+    title: '利用規約',
+    description:
+      '以下は暫定の簡易版です。正式な利用規約が確定した際は、この画面の文面を差し替えてください。',
+    sections: [
+      {
+        heading: '1. 利用範囲',
+        body:
+          '本システムは、会話、音声合成、アバター表示、外部サービス連携を含む対話機能を提供します。利用者は、適用される法令および各連携サービスの利用条件を遵守したうえで利用してください。',
+      },
+      {
+        heading: '2. 禁止事項',
+        body:
+          '不正アクセス、第三者の権利侵害、違法・有害な用途、過度な負荷を与える行為、または本システムの運用を妨げる行為を禁止します。',
+      },
+      {
+        heading: '3. 外部サービス',
+        body:
+          '音声エンジン、AI モデル、MCP サーバー、その他の外部サービスを利用する場合、それぞれの提供元の利用条件、ライセンス、料金体系が適用されることがあります。',
+      },
+      {
+        heading: '4. 免責',
+        body:
+          '本システムは現状有姿で提供されます。出力内容、可用性、継続性、特定目的適合性について保証するものではありません。',
+      },
+    ],
+  },
+  privacy: {
+    eyebrow: 'Privacy Notice',
+    title: 'プライバシー',
+    description:
+      '以下は暫定の簡易版です。正式なプライバシーポリシーが確定した際は、この画面の文面を差し替えてください。',
+    sections: [
+      {
+        heading: '1. 取得される情報',
+        body:
+          '本システムは、会話入力、音声入出力に関連する設定、接続先サーバー情報、利用するドメインやモデル設定など、機能提供に必要な範囲の情報を扱うことがあります。',
+      },
+      {
+        heading: '2. 利用目的',
+        body:
+          '取得した情報は、会話機能の提供、音声生成、接続状態の維持、利用履歴の同期、障害調査、品質改善のために利用されます。',
+      },
+      {
+        heading: '3. 外部送信',
+        body:
+          '利用する AI、音声、MCP、解析系サービスの構成によっては、入力テキストや関連メタデータが外部サービスへ送信される場合があります。送信先の取り扱いは各提供元の方針に従います。',
+      },
+      {
+        heading: '4. 見直し',
+        body:
+          '実運用に合わせて本案内を更新する場合があります。正式版の策定後は、その内容が優先されます。',
+      },
+    ],
+  },
+  about: {
+    eyebrow: 'About Ark-i',
+    title: 'About',
+    description:
+      'Ark-i',
+    sections: [
+      {
+        heading: 'Version',
+        body: '0.1.0',
+      },
+      {
+        heading: 'Copyright',
+        body: 'Copyright © 2026 NFTDrive',
+      },
+      {
+        heading: 'Developed by',
+        body: 'NFTDrive',
+      },
+      {
+        heading: '概要',
+        body:
+          'Ark-i は、組織や個人が独自の知識や役割をAIへ注入し、専用AIアシスタントを構築するためのAIプラットフォームです。',
+      },
+      {
+        heading: '適用分野',
+        body:
+          '病院、学校、自治体、企業、コミュニティなど、さまざまな分野に特化したAIを構築し、ローカル環境またはクラウド環境で運用できます。',
+      },
+      {
+        heading: 'ライセンス',
+        body:
+          '個人利用: 無料\n\n法人・団体利用: ライセンス契約が必要です。\n\n商用利用、組織利用、再配布、OEM提供等については、別途ライセンス契約が必要となる場合があります。\n\n詳細は NFTDrive までお問い合わせください。',
+      },
+      {
+        heading: '著作権',
+        body:
+          'Ark-i\n\nCopyright © 2026 NFTDrive\n\nAll Rights Reserved.',
+      },
+      {
+        heading: 'ウェブサイト',
+        body: 'https://nftdrive.net',
+      },
+      {
+        heading: 'OSSライセンス情報',
+        body:
+          '本製品は複数のオープンソースソフトウェアを利用しています。\n\n詳細は「Open Source Notices」をご確認ください。',
+      },
+    ],
+  },
+} as const;
+
 const LAUNCHER_DOMAIN_RESET_KEYS = [
   'name',
   'bg_url',
@@ -227,6 +484,7 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(false);
   const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMainMenu, setShowMainMenu] = useState(false);
+  const [informationView, setInformationView] = useState<InformationView | null>(null);
 
   useEffect(() => {
     void updateConfig("show_chat_mode", showChatMode ? "true" : "false");
@@ -244,9 +502,25 @@ export default function Home() {
     }
   }, [showDebug, showMainMenu, showSettings, showSettingsUi]);
 
+  useEffect(() => {
+    if (!informationView) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setInformationView(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [informationView]);
+
   const [showMoshi, setShowMoshi] = useState(false);
   const mainMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
+  const selectedDomainIdRef = useRef(selectedDomainId);
   const [selectedDomainGazeEnabled, setSelectedDomainGazeEnabled] = useState(true);
   const [selectedDomainLabel, setSelectedDomainLabel] = useState(() => config('injection_default_domain_label') || 'デフォルト');
   const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
@@ -287,6 +561,8 @@ export default function Home() {
   const [domainAuthDialogOpen, setDomainAuthDialogOpen] = useState(false);
   const [domainAccessPromptNonce, setDomainAccessPromptNonce] = useState(0);
   const [launcherEnabled, setLauncherEnabled] = useState(() => config('injection_launcher_enabled') !== 'false');
+  const [termsOfUseUrl, setTermsOfUseUrl] = useState('');
+  const [privacyPolicyUrl, setPrivacyPolicyUrl] = useState('');
   const [launcherEntered, setLauncherEntered] = useState(() => config('injection_launcher_enabled') === 'false');
   const [launcherStartingDomainId, setLauncherStartingDomainId] = useState<string | null>(null);
   const [attachedPackDetails, setAttachedPackDetails] = useState<{
@@ -604,6 +880,10 @@ export default function Home() {
   }, [chatLog]);
 
   useEffect(() => {
+    selectedDomainIdRef.current = selectedDomainId;
+  }, [selectedDomainId]);
+
+  useEffect(() => {
     void chatHistoryStore.upsertMessages(
       chatLog,
       sessionManager.getSessionId() || undefined,
@@ -681,6 +961,8 @@ export default function Home() {
       }
 
       setLauncherEnabled(settings.launcherEnabled);
+      setTermsOfUseUrl(settings.termsOfUseUrl);
+      setPrivacyPolicyUrl(settings.privacyPolicyUrl);
       setLauncherEntered(!settings.launcherEnabled);
     };
 
@@ -716,6 +998,26 @@ export default function Home() {
     }
   };
 
+  const handleInformationMenuSelect = (view: Exclude<InformationView, 'menu'>) => {
+    if (view === 'terms') {
+      if (!termsOfUseUrl) {
+        return;
+      }
+      window.open(termsOfUseUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (view === 'privacy') {
+      if (!privacyPolicyUrl) {
+        return;
+      }
+      window.open(privacyPolicyUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    setInformationView(view);
+  };
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -744,10 +1046,23 @@ export default function Home() {
       return;
     }
 
+    const resetConversationState = () => {
+      bot.setMessageList([]);
+      setThoughtMessage("");
+      setShownMessage("system");
+      setChatProcessing(false);
+      setChatSpeaking(false);
+    };
+
     const syncSelectedDomain = (domainId?: string) => {
+      const nextDomainId = domainId || localStorage.getItem('amica_selected_domain_id') || config('injection_default_domain') || 'default';
+      if (selectedDomainIdRef.current !== nextDomainId) {
+        resetConversationState();
+      }
+
       setVrmDisplayState('loading');
       setAvatarDisplayState('loading');
-      setSelectedDomainId(domainId || localStorage.getItem('amica_selected_domain_id') || config('injection_default_domain') || 'default');
+      setSelectedDomainId(nextDomainId);
       setDomainDisplayVersion((prev) => prev + 1);
     };
 
@@ -766,7 +1081,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('amica:domain-changed', handleDomainChanged as EventListener);
     };
-  }, []);
+  }, [bot]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -1409,6 +1724,25 @@ export default function Home() {
           </button>
         )}
 
+        <button
+          type="button"
+          className={clsx(
+            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+            informationView
+              ? "bg-violet-700/70 hover:bg-violet-600/80"
+              : "bg-slate-900/60 hover:bg-slate-800/80"
+          )}
+          title={informationView ? "インフォメーションを閉じる" : "インフォメーションを開く"}
+          aria-label={informationView ? "インフォメーションを閉じる" : "インフォメーションを開く"}
+          aria-pressed={Boolean(informationView)}
+          onClick={() => {
+            setShowMainMenu(false);
+            setInformationView((prev) => (prev ? null : 'menu'));
+          }}
+        >
+          <InformationCircleIcon className="h-5 w-5" />
+        </button>
+
         {showMainMenu && (
         <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
           <div className='flex flex-col justify-center items-center p-1 space-y-3'>
@@ -1590,6 +1924,246 @@ export default function Home() {
       {showChatMode && <ChatModeText key={`chat-mode-${domainDisplayVersion}`} messages={chatLog}/>}
 
       {showHistory && !domainAuthDialogOpen && <HistoryPanel open={showHistory} onClose={() => setShowHistory(false)} />}
+
+      {informationView && !domainAuthDialogOpen ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/82 px-4 py-6 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="インフォメーション"
+          onClick={() => setInformationView(null)}
+        >
+          <div
+            className="flex max-h-[min(80vh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-700/70 bg-slate-900/95 shadow-2xl shadow-slate-950/50"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-6 py-5">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-300/85">
+                  {informationView === 'menu' ? 'Information' : informationView === 'license' ? 'Open Source Notices' : INFORMATION_COPY[informationView].eyebrow}
+                </div>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  {informationView === 'menu' ? 'インフォメーション' : informationView === 'license' ? 'ライセンス情報' : INFORMATION_COPY[informationView].title}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                  {informationView === 'menu'
+                    ? 'ご利用前に確認できる情報をまとめています。項目を選ぶと詳細を表示します。'
+                    : informationView === 'license'
+                      ? '本システムでは、配布物に表示が必要な主要なオープンソースソフトウェア、音声モデル、およびフォントのライセンス情報を以下に記載しています。各ソフトウェアおよびモデルは、それぞれのライセンス条件に従って提供されています。'
+                      : informationView === 'about'
+                        ? '本システムの概要について記載します。'
+                        : INFORMATION_COPY[informationView].description}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {informationView !== 'menu' ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-800 px-4 text-sm font-medium text-slate-200 hover:bg-slate-700"
+                    onClick={() => setInformationView('menu')}
+                  >
+                    <ChevronLeftIcon className="h-4 w-4" />
+                    戻る
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  onClick={() => setInformationView(null)}
+                  aria-label="インフォメーションを閉じる"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-5">
+              {informationView === 'menu' ? (
+                <div className="grid gap-3">
+                  {INFORMATION_MENU_ITEMS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleInformationMenuSelect(item.id)}
+                      disabled={
+                        (item.id === 'terms' && !termsOfUseUrl) ||
+                        (item.id === 'privacy' && !privacyPolicyUrl)
+                      }
+                      className={clsx(
+                        "rounded-2xl border px-5 py-4 text-left transition",
+                        (item.id === 'terms' && !termsOfUseUrl) || (item.id === 'privacy' && !privacyPolicyUrl)
+                          ? "cursor-not-allowed border-slate-800 bg-slate-950/30 text-slate-500"
+                          : "border-slate-800 bg-slate-950/45 hover:border-cyan-400/30 hover:bg-slate-900/70"
+                      )}
+                    >
+                      <div className={clsx("text-base font-semibold", ((item.id === 'terms' && !termsOfUseUrl) || (item.id === 'privacy' && !privacyPolicyUrl)) ? "text-slate-400" : "text-white")}>
+                        {item.title}
+                      </div>
+                      <p className={clsx("mt-2 text-sm leading-6", ((item.id === 'terms' && !termsOfUseUrl) || (item.id === 'privacy' && !privacyPolicyUrl)) ? "text-slate-500" : "text-slate-300")}>
+                        {item.id === 'terms'
+                          ? termsOfUseUrl
+                            ? `設定URLを開きます: ${termsOfUseUrl}`
+                            : '公開設定で URL を指定すると開けます。'
+                          : item.id === 'privacy'
+                            ? privacyPolicyUrl
+                              ? `設定URLを開きます: ${privacyPolicyUrl}`
+                              : '公開設定で URL を指定すると開けます。'
+                            : item.summary}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : informationView === 'license' ? (
+                <>
+                  <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-3 text-sm leading-6 text-slate-200">
+                    <div className="font-semibold text-cyan-200">表示対象</div>
+                    <p className="mt-1">
+                      Amica 本体、UI・描画・ランタイムに直接組み込まれている主要ライブラリ、音声合成エンジン、音声モデル、および配布フォントを掲載しています。
+                    </p>
+                  </div>
+
+                  <div className="mt-5 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/85">
+                    フロントエンド・ランタイム
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {LICENSE_NOTICES.map((notice) => (
+                      <div
+                        key={`${notice.name}-${notice.license}`}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-base font-semibold text-white">{notice.name}</div>
+                          <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200">
+                            {notice.license}
+                          </span>
+                        </div>
+                        {'copyright' in notice && notice.copyright ? (
+                          <div className="mt-2 text-sm leading-6 text-slate-300">{notice.copyright}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/85">
+                    フォント
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    {FONT_LICENSE_NOTICES.map((notice) => (
+                      <div
+                        key={`${notice.name}-${notice.license}`}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-4"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-base font-semibold text-white">{notice.name}</div>
+                          <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200">
+                            {notice.license}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-4 text-sm leading-6 text-slate-300">
+                    <div className="font-semibold text-white">Ark-i OSSライセンス情報（音声関連）</div>
+
+                    <div className="mt-4 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/85">
+                      音声合成エンジン
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {AUDIO_LICENSE_SECTIONS.engines.map((engine) => (
+                        <div
+                          key={`${engine.name}-${engine.license}`}
+                          className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-base font-semibold text-white">{engine.name}</div>
+                            <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200">
+                              {engine.license}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-sm leading-6 text-slate-300">{engine.description}</div>
+                          <a
+                            href={engine.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex text-sm text-cyan-300 underline underline-offset-4 hover:text-cyan-200"
+                          >
+                            {engine.url}
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/85">
+                      音声モデル
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      {AUDIO_LICENSE_SECTIONS.models.map((model) => (
+                        <div
+                          key={model.name}
+                          className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4"
+                        >
+                          <div className="text-base font-semibold text-white">{model.name}</div>
+                          {'license' in model && model.license ? (
+                            <div className="mt-2">
+                              <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-200">
+                                {model.license}
+                              </span>
+                            </div>
+                          ) : null}
+                          {model.copyright ? (
+                            <div className="mt-2 text-sm leading-6 text-slate-300">{model.copyright}</div>
+                          ) : null}
+                          <div className="mt-2 text-sm leading-6 text-slate-300">{model.description}</div>
+                          {'provider' in model && model.provider ? (
+                            <div className="mt-2 text-sm leading-6 text-slate-300">{model.provider}</div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4">
+                      <div className="font-semibold text-white">利用条件</div>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        {AUDIO_LICENSE_SECTIONS.usage}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4">
+                      <div className="font-semibold text-white">謝辞</div>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        {AUDIO_LICENSE_SECTIONS.acknowledgment}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-4 text-sm leading-6 text-slate-300">
+                    <div className="font-semibold text-white">補足</div>
+                    <p className="mt-2">
+                      上記以外の依存パッケージについても、それぞれのライセンス条件に従います。
+                    </p>
+                    <p className="mt-2">
+                      詳細については、配布物に同梱されたライセンス文書、パッケージメタデータ、および各プロジェクトの公式サイトをご参照ください。
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="grid gap-4">
+                  {INFORMATION_COPY[informationView].sections.map((section) => (
+                    <section
+                      key={section.heading}
+                      className="rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-4"
+                    >
+                      <h3 className="text-base font-semibold text-white">{section.heading}</h3>
+                      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-300">{section.body}</p>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {domainAuthDialogOpen ? <div className="fixed inset-0 z-[110] bg-slate-950" aria-hidden="true" /> : null}
 
