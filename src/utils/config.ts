@@ -60,6 +60,7 @@ export const defaults = {
   show_arbius_introduction: process.env.NEXT_PUBLIC_SHOW_ARBIUS_INTRODUCTION ?? 'false', // Arbius関連のガイド表示
   show_add_to_homescreen: process.env.NEXT_PUBLIC_SHOW_ADD_TO_HOMESCREEN ?? 'true', // PWA(ホーム画面追加)の案内
   show_chat_mode: process.env.NEXT_PUBLIC_SHOW_CHAT_MODE ?? 'true',                 // チャットモードの初期表示
+  show_compact_mobile_chat_card: process.env.NEXT_PUBLIC_SHOW_COMPACT_MOBILE_CHAT_CARD ?? 'true', // スマホで対話優先の低いチャットカードを使うか
   show_settings_ui: process.env.NEXT_PUBLIC_SHOW_SETTINGS_UI ?? 'true',             // 設定UI全体を表示するか
   hidden_settings_pages: process.env.NEXT_PUBLIC_HIDDEN_SETTINGS_PAGES ?? '',       // 非表示にする設定ページキーのCSV
   bg_color: process.env.NEXT_PUBLIC_BG_COLOR ?? '',                                // 背景色

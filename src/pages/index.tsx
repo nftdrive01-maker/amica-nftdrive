@@ -543,6 +543,13 @@ export default function Home() {
   );
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isConnectionIndicatorExpanded, setIsConnectionIndicatorExpanded] = useState(true);
+  const [showCompactMobileChatCard, setShowCompactMobileChatCard] = useState(
+    () => config("show_compact_mobile_chat_card") === "true"
+  );
+
+  useEffect(() => {
+    void updateConfig("show_compact_mobile_chat_card", showCompactMobileChatCard ? "true" : "false");
+  }, [showCompactMobileChatCard]);
 
   // null indicates havent loaded config yet
   const [muted, setMuted] = useState<boolean|null>(null);
@@ -768,7 +775,20 @@ export default function Home() {
   };
   
   const toggleChatMode = () => {
+    if (isMobileViewport) {
+      setShowChatMode(false);
+      return;
+    }
+
     toggleState(setShowChatMode, [setShowChatLog, setShowSubconciousText, setShowHistory]);
+  };
+
+  const toggleCompactMobileChatCard = () => {
+    if (!isMobileViewport) {
+      return;
+    }
+
+    setShowCompactMobileChatCard((prev) => !prev);
   };
 
   const toggleHistory = () => {
@@ -1082,6 +1102,18 @@ export default function Home() {
       window.removeEventListener('amica:domain-changed', handleDomainChanged as EventListener);
     };
   }, [bot]);
+
+  useEffect(() => {
+    if (isMobileViewport && showChatMode) {
+      setShowChatMode(false);
+    }
+  }, [isMobileViewport, showChatMode]);
+
+  useEffect(() => {
+    if (!isMobileViewport && showCompactMobileChatCard) {
+      setShowCompactMobileChatCard(false);
+    }
+  }, [isMobileViewport, showCompactMobileChatCard]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -1674,21 +1706,41 @@ export default function Home() {
           </button>
         )}
 
-        <button
-          type="button"
-          className={clsx(
-            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
-            showChatMode
-              ? "bg-emerald-700/70 hover:bg-emerald-600/80"
-              : "bg-slate-900/60 hover:bg-slate-800/80"
-          )}
-          title={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
-          aria-label={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
-          aria-pressed={showChatMode}
-          onClick={toggleChatMode}
-        >
-          {showChatMode ? <Squares2X2Icon className="h-5 w-5" /> : <SquaresPlusIcon className="h-5 w-5" />}
-        </button>
+        {!isMobileViewport && (
+          <button
+            type="button"
+            className={clsx(
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              showChatMode
+                ? "bg-emerald-700/70 hover:bg-emerald-600/80"
+                : "bg-slate-900/60 hover:bg-slate-800/80"
+            )}
+            title={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
+            aria-label={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
+            aria-pressed={showChatMode}
+            onClick={toggleChatMode}
+          >
+            {showChatMode ? <Squares2X2Icon className="h-5 w-5" /> : <SquaresPlusIcon className="h-5 w-5" />}
+          </button>
+        )}
+
+        {isMobileViewport && (
+          <button
+            type="button"
+            className={clsx(
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              showCompactMobileChatCard
+                ? "bg-emerald-700/70 hover:bg-emerald-600/80"
+                : "bg-slate-900/60 hover:bg-slate-800/80"
+            )}
+            title={showCompactMobileChatCard ? "対話優先表示をオフ" : "対話優先表示をオン"}
+            aria-label={showCompactMobileChatCard ? "対話優先表示をオフ" : "対話優先表示をオン"}
+            aria-pressed={showCompactMobileChatCard}
+            onClick={toggleCompactMobileChatCard}
+          >
+            {showCompactMobileChatCard ? <ChatBubbleLeftRightIcon className="h-5 w-5" /> : <ChatBubbleLeftIcon className="h-5 w-5" />}
+          </button>
+        )}
 
         <button
           type="button"
@@ -1909,10 +1961,15 @@ export default function Home() {
       {!showSubconciousText && ! showChatLog && ! showChatMode && (
         <>
           { shownMessage === 'assistant' && (
-            <AssistantText key={`assistant-${domainDisplayVersion}`} message={assistantMessage} dbResult={assistantDbResult} />
+            <AssistantText
+              key={`assistant-${domainDisplayVersion}`}
+              message={assistantMessage}
+              dbResult={assistantDbResult}
+              compact={isMobileViewport && showCompactMobileChatCard}
+            />
           )}
           { shownMessage === 'user' && (
-            <UserText message={userMessage} />
+            <UserText message={userMessage} compact={isMobileViewport && showCompactMobileChatCard} />
           )}
         </>
       )}

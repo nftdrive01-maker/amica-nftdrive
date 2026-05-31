@@ -188,7 +188,15 @@ function splitChronicleBlock(text: string): {
   };
 }
 
-export const AssistantText = ({ message, dbResult: dbResultProp }: { message: string; dbResult?: ChatDbResult }) => {
+export const AssistantText = ({
+  message,
+  dbResult: dbResultProp,
+  compact = false,
+}: {
+  message: string;
+  dbResult?: ChatDbResult;
+  compact?: boolean;
+}) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const accentColor = normalizeThemeColor(config('theme_color'));
   const normalizedMessage = stripDisplayControlTags(message);
@@ -209,20 +217,20 @@ export const AssistantText = ({ message, dbResult: dbResultProp }: { message: st
         <div className="relative overflow-hidden rounded-none shadow-[0_22px_64px_rgba(15,23,42,0.2)]">
           <div className="pointer-events-none absolute inset-y-0 left-0 right-0 bg-slate-950/22 backdrop-blur-[3px]" />
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.2)_0%,rgba(15,23,42,0.24)_10%,rgba(15,23,42,0.32)_22%,rgba(15,23,42,0.4)_34%,rgba(15,23,42,0.46)_50%,rgba(15,23,42,0.4)_66%,rgba(15,23,42,0.32)_78%,rgba(15,23,42,0.24)_90%,rgba(15,23,42,0.2)_100%)]" />
-          <div className="relative z-10 px-6 py-5 md:px-8">
+          <div className={clsx("relative z-10 md:px-8", compact ? "px-5 py-3" : "px-6 py-5")}>
             <div className="flex items-center gap-2 pb-1 text-white font-bold tracking-wider">
               <span className="inline-flex items-center text-[24px] font-bold leading-none text-pink-400 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[24px]" style={accentColor ? { color: accentColor } : undefined}>
                 {`${config('name')}:`}
               </span>
             </div>
-            <div className="overflow-y-auto pb-3 pt-1 max-h-[calc(75vh)]">
-              <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-[18px] font-semibold leading-[1.5] text-white/95 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[25px]">
+            <div className={clsx("overflow-y-auto pb-3 pt-1", compact ? "max-h-[19vh]" : "max-h-[calc(75vh)]")}>
+              <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-[15px] font-semibold leading-[1.5] text-white/95 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[25px]">
                 {chipLabel && chronicleContent && (
                   <div className="mb-3 bg-slate-950/12 px-3 py-2 backdrop-blur-[2px]">
                     <div className="mb-2 inline-flex items-center text-[13px] font-bold tracking-[0.18em] text-cyan-200">
                       {chipLabel}
                     </div>
-                    <div className="whitespace-pre-wrap break-words text-[17px] font-medium leading-[1.55] text-white/90 sm:text-[22px]">
+                    <div className="whitespace-pre-wrap break-words text-[14px] font-medium leading-[1.55] text-white/90 sm:text-[22px]">
                       {renderMultilineWithLinks(chronicleContent)}
                     </div>
                   </div>

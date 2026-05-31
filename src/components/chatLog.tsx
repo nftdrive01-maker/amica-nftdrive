@@ -399,7 +399,7 @@ function Chat({
           </div>
         </div>
         <div className="px-4 pt-3 pb-2 bg-white/80 backdrop-blur-lg rounded-b-lg shadow-sm">
-          <div className='typography-16 font-M_PLUS_2 font-bold text-gray-800 whitespace-pre-wrap break-words leading-relaxed'>
+          <div className='typography-16 text-[14px] sm:text-[16px] font-M_PLUS_2 font-bold text-gray-800 whitespace-pre-wrap break-words leading-relaxed'>
             {role === "assistant" ? (
               <div>
                 {chipLabel && chronicleContent && (() => {
@@ -411,7 +411,7 @@ function Chat({
                       <div className="mb-2 inline-flex items-center rounded-full border border-cyan-400 bg-white px-2 py-0.5 text-xs font-bold text-cyan-700">
                         {chipLabel}
                       </div>
-                      <div className="typography-16 font-M_PLUS_2 text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
+                      <div className="typography-16 text-[13px] sm:text-[16px] font-M_PLUS_2 text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
                         {renderMultilineWithLinks(mainText.trim())}
                         {citationText && (
                           <div className="mt-4 border-t border-cyan-200 pt-2">
