@@ -6,6 +6,7 @@
 >
 > NFTDrive fork of Amica for Ark-i integration, injection-tool connectivity, and domain-based AI operation.
 > This repository is maintained by NFTDrive for Ark-i related deployment and operational workflows.
+> Default branch for NFTDrive operations: feat-add-injection
 > For the original upstream project, see: https://github.com/semperai/amica
 
 <h2 align="center"><a href="https://amica.arbius.ai">Amica: Your friendly personal AI</a></h2>
@@ -17,7 +18,7 @@
 <h5 align="center">
 
 [![twitter](https://img.shields.io/badge/Twitter%20-black)](https://twitter.com/arbius_ai)
-[![License](https://img.shields.io/github/license/nftdrive01-maker/amica-nftdrive)](https://github.com/nftdrive01-maker/amica-nftdrive/blob/master/LICENSE)
+[![License](https://img.shields.io/github/license/nftdrive01-maker/amica-nftdrive)](https://github.com/nftdrive01-maker/amica-nftdrive/blob/feat-add-injection/LICENSE)
 [![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Fsemperai%2Famica&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)](https://hits.seeyoufarm.com)
 [![GitHub issues](https://img.shields.io/github/issues/nftdrive01-maker/amica-nftdrive?color=critical&label=Issues)](https://github.com/nftdrive01-maker/amica-nftdrive/issues?q=is%3Aopen+is%3Aissue)
 [![GitHub closed issues](https://img.shields.io/github/issues-closed/nftdrive01-maker/amica-nftdrive?color=success&label=Issues)](https://github.com/nftdrive01-maker/amica-nftdrive/issues?q=is%3Aissue+is%3Aclosed)
@@ -76,6 +77,8 @@ The various features of Amica mainly use and support the following technologies:
 ## 🛠️ Installation and running
 
 To run this project locally, clone or download the repository.
+
+NFTDrive fork operations assume the default branch `feat-add-injection`.
 
 ```bash
 git clone https://github.com/nftdrive01-maker/amica-nftdrive.git
@@ -171,7 +174,7 @@ A companion management tool that allows non-engineers to update AI's knowledge b
 For detailed documentation, see [Injection Tool README](../injection-tool/README.md)
 
 ## 🔒 License
-* The majority of this project is released under the MIT license as found in the [LICENSE](https://github.com/nftdrive01-maker/amica-nftdrive/blob/master/LICENSE) file.
+* The majority of this project is released under the MIT license as found in the [LICENSE](https://github.com/nftdrive01-maker/amica-nftdrive/blob/feat-add-injection/LICENSE) file.
 * Assets such as 3D models and images are released under their authors respective licenses.
 
 
