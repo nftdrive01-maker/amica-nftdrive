@@ -46,4 +46,7 @@ working/*
 .env.local
 .env*.local
 
+# runtime storage
+src/features/externalAPI/dataHandlerStorage/*.json
+
 amica.code-workspace

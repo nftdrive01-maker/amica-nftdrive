@@ -1,7 +1,8 @@
+import fs from "fs";
 import isDev from "@/utils/isDev";
 import { readFile, writeFile } from "./utils/apiHelper";
 import path from "path";
-import { config, isSecretConfigKey } from "@/utils/config";
+import { config, defaults, isSecretConfigKey } from "@/utils/config";
 
 // Define file paths
 export const configFilePath = path.resolve(
@@ -19,6 +20,30 @@ export const userInputMessagesFilePath = path.resolve(
 export const chatLogsFilePath = path.resolve(
   "src/features/externalAPI/dataHandlerStorage/chatLogs.json",
 );
+
+function ensureDataHandlerStorageFiles() {
+  const storageDir = path.dirname(configFilePath);
+
+  if (!fs.existsSync(storageDir)) {
+    fs.mkdirSync(storageDir, { recursive: true });
+  }
+
+  const initialFiles: Array<[string, unknown]> = [
+    [configFilePath, defaults],
+    [subconsciousFilePath, []],
+    [logsFilePath, []],
+    [userInputMessagesFilePath, []],
+    [chatLogsFilePath, []],
+  ];
+
+  for (const [filePath, initialValue] of initialFiles) {
+    if (!fs.existsSync(filePath)) {
+      writeFile(filePath, initialValue);
+    }
+  }
+}
+
+ensureDataHandlerStorageFiles();
 
 // GET Request Handlers
 export const handleGetConfig = () => {
