@@ -4,7 +4,8 @@
 
 > NFTDrive fork repository: https://github.com/nftdrive01-maker/amica-nftdrive
 >
-> This repository is maintained by NFTDrive as a fork of `semperai/amica` for Ark-i integration, injection-tool connectivity, domain-based operation, and deployment workflows.
+> NFTDrive fork of Amica for Ark-i integration, injection-tool connectivity, and domain-based AI operation.
+> This repository is maintained by NFTDrive for Ark-i related deployment and operational workflows.
 > For the original upstream project, see: https://github.com/semperai/amica
 
 <h2 align="center"><a href="https://amica.arbius.ai">Amica: Your friendly personal AI</a></h2>
