@@ -13,6 +13,7 @@ export type WebSpeechAudioLevel = {
 
 type WebSpeechCallbacks = {
   onResult: (text: string) => void;
+  onSpeechDetected?: () => void;
   onError?: (message: string) => void;
   onEnd?: () => void;
   onAudioLevel?: (level: WebSpeechAudioLevel) => void;
@@ -63,6 +64,7 @@ export function createWebSpeechTranscriber(
   let monitorAnalyser: AnalyserNode | null = null;
   let monitorFrameId: number | null = null;
   let lastLevelEmitAt = 0;
+  let hasDetectedSpeech = false;
 
   const cleanupAudioMonitor = () => {
     if (monitorFrameId !== null) {
@@ -128,6 +130,10 @@ export function createWebSpeechTranscriber(
 
         const rms = Math.sqrt(sumSquares / pcm.length);
         const db = 20 * Math.log10(Math.max(rms, 0.00001));
+        if (!hasDetectedSpeech && rms >= 0.02) {
+          hasDetectedSpeech = true;
+          callbacks.onSpeechDetected?.();
+        }
         const now = Date.now();
         if (callbacks.onAudioLevel && now - lastLevelEmitAt >= 250) {
           callbacks.onAudioLevel({
@@ -158,6 +164,7 @@ export function createWebSpeechTranscriber(
 
   const startRecognition = () => {
     clearRestartTimer();
+    hasDetectedSpeech = false;
     try {
       console.log('[webSpeech] start()');
       recognition.start();
@@ -204,6 +211,10 @@ export function createWebSpeechTranscriber(
         if (!transcript) {
           continue;
         }
+        if (!hasDetectedSpeech) {
+          hasDetectedSpeech = true;
+          callbacks.onSpeechDetected?.();
+        }
         console.log('[webSpeech] result[' + index + '] isFinal:', result?.isFinal, 'transcript:', transcript);
         if (result?.isFinal) {
           text += `${transcript} `;
@@ -221,17 +232,31 @@ export function createWebSpeechTranscriber(
   recognition.onerror = (event: any) => {
     const errorMsg = String(event?.error ?? 'speech_error');
     console.error('[webSpeech] onerror event:', errorMsg);
-    
+
+    // recoverable errors are common with the browser speech API; keep the
+    // session alive and let recognition restart instead of leaving the mic stuck.
+    const shouldAutoRecover = errorMsg === 'no-speech' || errorMsg === 'aborted';
+
     // より詳しいエラーメッセージをコンソールに出力
     if (errorMsg === 'no-speech') {
-      console.warn('[webSpeech] 音声が検出されませんでした。以下を確認してください：');
+      console.warn('[webSpeech] 音声開始前のタイムアウト、または無音判定です。以下を確認してください：');
       console.warn('  1. マイクが接続されているか');
       console.warn('  2. ブラウザがマイクの使用を許可しているか');
       console.warn('  3. マイク音量が十分か');
       console.warn('  4. 音声を入力し始めるのに遅延がないか');
+      if (shouldContinue && !manuallyStopping) {
+        scheduleRestart('onerror:no-speech');
+      }
       return;
     } else if (errorMsg === 'not-allowed') {
       console.warn('[webSpeech] マイクの使用が許可されていません。ブラウザの設定を確認してください。');
+    }
+
+    if (shouldAutoRecover) {
+      if (shouldContinue && !manuallyStopping) {
+        scheduleRestart(`onerror:${errorMsg}`);
+      }
+      return;
     }
     
     callbacks.onError?.(errorMsg);

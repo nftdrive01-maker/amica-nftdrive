@@ -1,10 +1,13 @@
-import { config } from '@/utils/config';
 import { Telegraf } from 'telegraf';
 
 class TelegramClient {
-  private bot: Telegraf;
+  private bot: Telegraf | null = null;
 
-  constructor() {
+  private ensureBot() {
+    if (this.bot) {
+      return;
+    }
+
     const botToken = process.env.TELEGRAM_BOT_TOKEN as string;
 
     if (!botToken) {
@@ -19,7 +22,8 @@ class TelegramClient {
   public async postMessage(content: string): Promise<void> {
     const chatId = process.env.TELEGRAM_CHAT_ID as string;
     try {
-      await this.bot.telegram.sendMessage(chatId, content);
+      this.ensureBot();
+      await this.bot!.telegram.sendMessage(chatId, content);
       console.log('Message posted successfully');
     } catch (error) {
       console.error('Error posting message to Telegram:', error);
@@ -27,7 +31,8 @@ class TelegramClient {
   }
 
   public getBotInstance(): Telegraf {
-    return this.bot;
+    this.ensureBot();
+    return this.bot!;
   }
 }
 

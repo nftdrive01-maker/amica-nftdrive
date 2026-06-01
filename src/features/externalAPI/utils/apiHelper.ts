@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import type { NextApiResponse } from "next";
 import fs from "fs";
-import { sseClients } from "@/pages/api/amicaHandler";
+import path from "path";
 
 export interface ApiResponse {
   sessionId?: string;
@@ -18,6 +18,8 @@ export interface apiLogEntry {
   response?: any;
   error?: string;
 }
+
+export const sseClients: Array<{ res: NextApiResponse }> = [];
 
 export const generateSessionId = (sessionId?: string): string =>
   sessionId || randomBytes(8).toString("hex");
@@ -46,6 +48,10 @@ export const readFile = (filePath: string): any => {
 
 export const writeFile = (filePath: string, content: any): void => {
   try {
+    const directory = path.dirname(filePath);
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
     fs.writeFileSync(filePath, JSON.stringify(content, null, 2), "utf8");
   } catch (error) {
     console.error(`Error writing file at ${filePath}:`, error);

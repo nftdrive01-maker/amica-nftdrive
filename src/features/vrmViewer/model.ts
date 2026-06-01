@@ -381,6 +381,10 @@ export class Model {
     });
   }
 
+  public stopSpeaking() {
+    this._lipSync?.stop();
+  }
+
   public update(delta: number): void {
     if (this._lipSync) {
       const { volume } = this._lipSync.update();

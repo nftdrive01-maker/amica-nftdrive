@@ -960,10 +960,20 @@ export default function MessageInput({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // マウント時1回のみ
 
+  function interruptAssistantForUserInput() {
+    if (config("amica_life_enabled") === "true") {
+      void amicaLife.pause();
+    } else {
+      void bot.interrupt();
+    }
+    bot.updateAwake();
+  }
+
   const vad = useMicVAD({
     startOnLoad: false,
     onSpeechStart: () => {
       console.debug('vad', 'on_speech_start');
+      interruptAssistantForUserInput();
       console.time('performance_speech');
     },
     onSpeechEnd: (audio: Float32Array) => {
@@ -1111,10 +1121,7 @@ export default function MessageInput({
     onChangeUserMessage(event); 
   
     // Pause amicaLife and update bot's awake status when typing
-    if (config("amica_life_enabled") === "true") {
-      amicaLife.pause();
-      bot.updateAwake();
-    }
+    interruptAssistantForUserInput();
   }
 
   const isWebSpeechBackend = config('stt_backend') === 'web_speech';
@@ -1149,6 +1156,10 @@ export default function MessageInput({
         onResult: (text: string) => {
           console.log('[toggleWebSpeech] onResult:', text);
           handleTranscriptionResult(text);
+        },
+        onSpeechDetected: () => {
+          console.log('[toggleWebSpeech] onSpeechDetected');
+          interruptAssistantForUserInput();
         },
         onAudioLevel: (level: WebSpeechAudioLevel) => {
           if (level.rms > webSpeechMaxRmsRef.current) {

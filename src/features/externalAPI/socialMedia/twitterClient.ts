@@ -1,16 +1,23 @@
-import { config } from '@/utils/config';
 import { TwitterApi, TwitterApiReadWrite, TwitterApiReadOnly, TweetV2PostTweetResult } from 'twitter-api-v2';
 
 class TwitterClient {
-  private twitterClient: TwitterApiReadWrite;
-  private twitterBearer: TwitterApiReadOnly;
+  private twitterClient: TwitterApiReadWrite | null = null;
+  private twitterBearer: TwitterApiReadOnly | null = null;
 
-  constructor() {
+  private ensureClients() {
+    if (this.twitterClient && this.twitterBearer) {
+      return;
+    }
+
     const appKey = process.env.X_API_KEY as string;
     const appSecret = process.env.X_API_SECRET as string;
     const accessToken = process.env.X_ACCESS_TOKEN as string;
     const accessSecret = process.env.X_ACCESS_SECRET as string;
     const bearerToken = process.env.X_BEARER_TOKEN as string;
+
+    if (!appKey || !appSecret || !accessToken || !accessSecret || !bearerToken) {
+      throw new Error('X/Twitter credentials are not configured');
+    }
 
     // Initialize the Twitter API client with access tokens
     const client = new TwitterApi({
@@ -30,18 +37,20 @@ class TwitterClient {
 
   // Method to get the read-write client
   public getReadWriteClient(): TwitterApiReadWrite {
-    return this.twitterClient;
+    this.ensureClients();
+    return this.twitterClient!;
   }
 
   // Method to get the read-only client
   public getReadOnlyClient(): TwitterApiReadOnly {
-    return this.twitterBearer;
+    this.ensureClients();
+    return this.twitterBearer!;
   }
 
   // Function to post a tweet
   public async postTweet(content: string): Promise<TweetV2PostTweetResult | undefined> {
     try {
-      const response = await this.twitterClient.v2.tweet(content);
+      const response = await this.getReadWriteClient().v2.tweet(content);
       return response;
     } catch (error) {
       console.error('Error posting tweet:', error);
@@ -52,5 +61,5 @@ class TwitterClient {
 
 // Export an instance of the TwitterClient class for use
 export const twitterClientInstance = new TwitterClient();
-export const twitterReadWriteClient = twitterClientInstance.getReadWriteClient();
-export const twitterReadOnlyClient = twitterClientInstance.getReadOnlyClient();
+export const twitterReadWriteClient = () => twitterClientInstance.getReadWriteClient();
+export const twitterReadOnlyClient = () => twitterClientInstance.getReadOnlyClient();

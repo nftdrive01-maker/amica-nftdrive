@@ -45,9 +45,47 @@ function ensureDataHandlerStorageFiles() {
 
 ensureDataHandlerStorageFiles();
 
+function ensureConfigShape() {
+  ensureDataHandlerStorageFiles();
+
+  let storedConfig: Record<string, any>;
+  try {
+    storedConfig = readFile(configFilePath);
+  } catch {
+    storedConfig = { ...defaults };
+    writeFile(configFilePath, storedConfig);
+    return storedConfig;
+  }
+
+  if (!storedConfig || typeof storedConfig !== "object" || Array.isArray(storedConfig)) {
+    storedConfig = { ...defaults };
+    writeFile(configFilePath, storedConfig);
+    return storedConfig;
+  }
+
+  let changed = false;
+  const mergedConfig: Record<string, any> = { ...defaults };
+
+  for (const [key, value] of Object.entries(storedConfig)) {
+    mergedConfig[key] = value;
+  }
+
+  for (const key of Object.keys(defaults)) {
+    if (!(key in storedConfig)) {
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    writeFile(configFilePath, mergedConfig);
+  }
+
+  return mergedConfig;
+}
+
 // GET Request Handlers
 export const handleGetConfig = () => {
-  const storedConfig = readFile(configFilePath);
+  const storedConfig = ensureConfigShape();
   return Object.fromEntries(
     Object.entries(storedConfig).map(([key, value]) => [
       key,
@@ -55,13 +93,22 @@ export const handleGetConfig = () => {
     ]),
   );
 };
-export const handleGetSubconscious = () => readFile(subconsciousFilePath);
-export const handleGetLogs = () => readFile(logsFilePath);
+export const handleGetSubconscious = () => {
+  ensureDataHandlerStorageFiles();
+  return readFile(subconsciousFilePath);
+};
+export const handleGetLogs = () => {
+  ensureDataHandlerStorageFiles();
+  return readFile(logsFilePath);
+};
 export const handleGetUserInputMessages = () =>
-  readFile(userInputMessagesFilePath);
-export const handleGetChatLogs = () => readFile(chatLogsFilePath);
+  (ensureDataHandlerStorageFiles(), readFile(userInputMessagesFilePath));
+export const handleGetChatLogs = () => {
+  ensureDataHandlerStorageFiles();
+  return readFile(chatLogsFilePath);
+};
 
-export const readServerConfig = () => readFile(configFilePath);
+export const readServerConfig = () => ensureConfigShape();
 
 // POST Request Handlers
 export const handlePostConfig = (body: any) => updateConfig(body);
@@ -72,12 +119,9 @@ export const handlePostChatLogs = (body: any) => updateChatLogs(body);
 
 // Update Functions
 const updateConfig = (body: any) => {
-  const config = readFile(configFilePath);
+  const config = ensureConfigShape();
   if (body.key && body.value !== undefined) {
     const { key, value } = body;
-    if (!config.hasOwnProperty(key)) {
-      throw new Error(`Config key "${key}" not found.`);
-    }
     config[key] = value;
     writeFile(configFilePath, config);
     return { message: "Config updated successfully." };
@@ -99,6 +143,8 @@ const updateSubconscious = (body: any) => {
     return;
   }
 
+  ensureDataHandlerStorageFiles();
+
   if (!Array.isArray(body.subconscious)) {
     throw new Error("Subconscious data must be an array.");
   }
@@ -110,6 +156,8 @@ const updateUserInputMessages = (body: any) => {
   if (!isDev || config("external_api_enabled") !== "true") {
     return;
   }
+
+  ensureDataHandlerStorageFiles();
 
   let existingMessage = readFile(userInputMessagesFilePath);
   if (!Array.isArray(existingMessage)) {
@@ -124,6 +172,8 @@ const updateLogs = (body: any) => {
   if (!isDev || config("external_api_enabled") !== "true") {
     return;
   }
+
+  ensureDataHandlerStorageFiles();
 
   const { type, ts, arguments: logArguments } = body;
   const logEntry = { type, ts, arguments: logArguments };
@@ -140,6 +190,8 @@ const updateChatLogs = (body: any) => {
   if (!isDev || config("external_api_enabled") !== "true") {
     return;
   }
+
+  ensureDataHandlerStorageFiles();
 
   if (!Array.isArray(body)) {
     throw new Error("Chat logs data must be an array.");

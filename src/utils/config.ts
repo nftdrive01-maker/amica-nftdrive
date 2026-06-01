@@ -104,7 +104,7 @@ export const defaults = {
   tts_muted: 'false',                                                              // 音声出力を最初からミュートにするか
   tts_backend: process.env.NEXT_PUBLIC_TTS_BACKEND ?? 'stylebertvits2',                    // 標準で使用するTTS
   async_tts_mode: process.env.NEXT_PUBLIC_ASYNC_TTS_MODE ?? 'false',               // true のときはチャット表示を TTS 取得より先に進める
-  stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'whisper_browser',          // 標準で使用する音声認識
+    stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'web_speech',               // 標準で使用する音声認識
 
   // --- 画像認識 (Vision) 設定 ---
   vision_backend: process.env.NEXT_PUBLIC_VISION_BACKEND ?? 'vision_openai',       // 画像解析エンジン

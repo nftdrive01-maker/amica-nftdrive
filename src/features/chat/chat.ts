@@ -250,6 +250,9 @@ export class Chat {
   private pendingMcpInfo?: Message["mcpInfo"];
   private pendingChronicleDecoratedBlock: string;
   private speakingNow: boolean;
+  private currentPlaybackAudioContext: AudioContext | null;
+  private currentPlaybackSource: AudioBufferSourceNode | null;
+  private currentPlaybackResolve: (() => void) | null;
 
   private lastAwake: number;
 
@@ -295,6 +298,9 @@ export class Chat {
     this.pendingMcpInfo = undefined;
     this.pendingChronicleDecoratedBlock = "";
     this.speakingNow = false;
+    this.currentPlaybackAudioContext = null;
+    this.currentPlaybackSource = null;
+    this.currentPlaybackResolve = null;
 
     this.messageList = [];
     this.currentStreamIdx = 0;
@@ -585,11 +591,23 @@ export class Chat {
                   const source = audioCtx.createBufferSource();
                   source.buffer = decoded;
                   source.connect(audioCtx.destination);
+                  this.currentPlaybackAudioContext = audioCtx;
+                  this.currentPlaybackSource = source;
+                  this.currentPlaybackResolve = resolve;
                   source.start();
                   source.addEventListener("ended", () => {
-                    audioCtx.close();
+                    if (this.currentPlaybackSource === source) {
+                      this.currentPlaybackSource = null;
+                    }
+                    if (this.currentPlaybackAudioContext === audioCtx) {
+                      this.currentPlaybackAudioContext = null;
+                    }
+                    if (this.currentPlaybackResolve === resolve) {
+                      this.currentPlaybackResolve = null;
+                    }
+                    void audioCtx.close();
                     resolve();
-                  });
+                  }, { once: true });
                 }, () => resolve());
               } catch {
                 resolve();
@@ -626,6 +644,34 @@ export class Chat {
 
   public isSpeaking(): boolean {
     return this.speakingNow;
+  }
+
+  private stopCurrentPlayback() {
+    this.viewer?.model?.stopSpeaking();
+
+    const source = this.currentPlaybackSource;
+    const audioContext = this.currentPlaybackAudioContext;
+    const resolve = this.currentPlaybackResolve;
+
+    this.currentPlaybackSource = null;
+    this.currentPlaybackAudioContext = null;
+    this.currentPlaybackResolve = null;
+    this.speakingNow = false;
+    this.setChatSpeaking?.(false);
+
+    if (source) {
+      try {
+        source.stop();
+      } catch {
+        // no-op
+      }
+    }
+
+    if (audioContext) {
+      void audioContext.close().catch(() => undefined);
+    }
+
+    resolve?.();
   }
 
   public speakAssistantReaction(text: string, domainId?: string): void {
@@ -811,6 +857,7 @@ export class Chat {
 
   public async interrupt() {
     this.currentStreamIdx++;
+    this.stopCurrentPlayback();
     try {
       if (this.reader) {
         console.debug("cancelling");

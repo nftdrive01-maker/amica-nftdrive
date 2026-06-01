@@ -119,7 +119,7 @@ The following environment variables may be set to configure the application:
 * `NEXT_PUBLIC_KOBOLDAI_URL` - The URL of the KoboldAI API.
 * `NEXT_PUBLIC_KOBOLDAI_USE_EXTRA` - Whether to use extra api for KoboldAI (KoboldCpp).
 * `NEXT_PUBLIC_TTS_BACKEND` - The backend to use for TTS. Valid values are `none`, `openai_tts`, `elevenlabs`, `coqui`, and `speecht5`
-* `NEXT_PUBLIC_STT_BACKEND` - The backend to use for STT. Valid values are `none`, `whisper_browser`, `whispercpp`, and `whispercpp_server`
+* `NEXT_PUBLIC_STT_BACKEND` - The backend to use for STT. Valid values are `none`, `whisper_browser`, `web_speech`, `whisper_openai`, and `whispercpp`
 * `NEXT_PUBLIC_VISION_BACKEND` - The backend to use for vision. Valid values are `none`, and `llamacpp`
 * `NEXT_PUBLIC_VISION_SYSTEM_PROMPT` - The system prompt to use for vision.
 * `NEXT_PUBLIC_VISION_LLAMACPP_URL` - The URL of the LlamaCPP API.

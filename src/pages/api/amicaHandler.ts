@@ -4,12 +4,11 @@ import { config } from "@/utils/config";
 import { handleConfig, handleSubconscious } from "@/features/externalAPI/externalAPI";
 import { requireProtectedApiRoute } from '@/lib/apiSecurity';
 
-import { generateSessionId, sendError, apiLogEntry, ApiResponse } from "@/features/externalAPI/utils/apiHelper";
+import { generateSessionId, sendError, apiLogEntry, ApiResponse, sseClients } from "@/features/externalAPI/utils/apiHelper";
 import { requestMemory, requestLogs, requestUserInputMessages, requestChatHistory } from "@/features/externalAPI/utils/requestHandler";
 import { processNormalChat, triggerAmicaActions, updateSystemPrompt } from "@/features/externalAPI/processors/chatProcessor";
 
 export const apiLogs: apiLogEntry[] = [];
-export const sseClients: Array<{ res: NextApiResponse }> = [];
 
 // Main Amica Handler
 export default async function handler(
