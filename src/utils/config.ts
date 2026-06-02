@@ -69,7 +69,7 @@ export const defaults = {
   vrm_url: process.env.NEXT_PUBLIC_VRM_URL ?? process.env.NEXT_PUBLIC_VRM_HASH ?? '',                                // キャラクター(VRM)のパス
   vrm_hash: '1',                                                                    // VRMファイルのハッシュ値
   vrm_save_type: 'web',                                                            // モデルデータの保存方法
-  vrm_enabled: 'true',                                                             // VRMアバター表示を有効にするか
+  vrm_enabled: 'false',                                                            // VRMアバター表示を有効にするか
   image_avatar_idle_url: '',                                                       // 2Dアバター(通常)画像
   image_avatar_talk_url: '',                                                       // 2Dアバター(発話中)画像
   image_avatar_talk_interval_ms: '180',                                            // 発話中の切替速度(ms)
@@ -101,7 +101,7 @@ export const defaults = {
   openrouter_model: process.env.NEXT_PUBLIC_OPENROUTER_MODEL ?? 'openai/gpt-3.5-turbo',
 
   // --- システム基本設定 ---
-  tts_muted: 'false',                                                              // 音声出力を最初からミュートにするか
+  tts_muted: 'true',                                                               // 音声出力を最初からミュートにするか
   tts_backend: process.env.NEXT_PUBLIC_TTS_BACKEND ?? 'stylebertvits2',                    // 標準で使用するTTS
   async_tts_mode: process.env.NEXT_PUBLIC_ASYNC_TTS_MODE ?? 'false',               // true のときはチャット表示を TTS 取得より先に進める
     stt_backend: process.env.NEXT_PUBLIC_STT_BACKEND ?? 'web_speech',               // 標準で使用する音声認識
@@ -174,7 +174,7 @@ export const defaults = {
   injection_tool_timeout_ms: process.env.NEXT_PUBLIC_INJECTION_TOOL_TIMEOUT_MS ?? '65000',    // タイムアウト（ミリ秒）
   injection_default_domain: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN ?? 'default', // デフォルトドメインID
   injection_default_domain_label: process.env.NEXT_PUBLIC_INJECTION_DEFAULT_DOMAIN_LABEL ?? 'デフォルト', // デフォルトドメイン表示名
-  injection_launcher_enabled: process.env.NEXT_PUBLIC_INJECTION_LAUNCHER_ENABLED ?? 'true', // ドメインランチャーを表示するか
+  injection_launcher_enabled: process.env.NEXT_PUBLIC_INJECTION_LAUNCHER_ENABLED ?? 'false', // ドメインランチャーを表示するか
   injection_domain_options: process.env.NEXT_PUBLIC_INJECTION_DOMAIN_OPTIONS ?? '[{"id":"default","label":"デフォルト"}]',
   injection_fallback_system_prompt: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_SYSTEM_PROMPT ?? '',
   injection_fallback_user_context: process.env.NEXT_PUBLIC_INJECTION_FALLBACK_USER_CONTEXT ?? '',
@@ -189,7 +189,7 @@ export const defaults = {
   idle_text_prompt: 'No file selected', // アイドル時のデフォルトテキスト
 
   // --- キャラクター基本定義 ---
-  name: process.env.NEXT_PUBLIC_NAME ?? '夢 未来',                                   // キャラクターの名前
+  name: process.env.NEXT_PUBLIC_NAME ?? 'Ark-i',                                              // キャラクターの名前
   system_prompt: process.env.NEXT_PUBLIC_SYSTEM_PROMPT ?? `あなたは丁寧で信頼できる案内役です。共通ナレッジを活用し、簡潔かつ正確に回答してください。`, // システムプロンプト（キャラクターの基本設定）
 
 };
