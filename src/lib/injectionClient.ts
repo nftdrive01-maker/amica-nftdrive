@@ -115,6 +115,45 @@ function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function emitMcpTriggeredEvent(payload: InjectionInterceptResponse): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const metadata = payload?.metadata;
+  if (!metadata?.mcpUsed) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent('amica:mcp-triggered', {
+      detail: {
+        at: Date.now(),
+        serverId: metadata.mcpServerId || '',
+        toolName: metadata.mcpToolName || '',
+      },
+    }),
+  );
+}
+
+function emitInterceptEvent(payload: InjectionInterceptResponse): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const metadata = payload?.metadata;
+  window.dispatchEvent(
+    new CustomEvent('amica:mcp-intercepted', {
+      detail: {
+        at: Date.now(),
+        used: Boolean(metadata?.mcpUsed),
+        serverId: metadata?.mcpServerId || '',
+        toolName: metadata?.mcpToolName || '',
+      },
+    }),
+  );
+}
+
 /**
  * base が相対パス（BFF プロキシ）の場合も正しくエンドポイントを生成する。
  * 例: base='/api/injection', apiPath='/api/intercept' → '/api/injection/intercept'
@@ -310,6 +349,8 @@ export async function fetchInjectedContext(
         if (data && typeof data === 'object') {
           // キャッシュに保存
           cacheInjection(targetDomainId, data);
+          emitInterceptEvent(data as InjectionInterceptResponse);
+          emitMcpTriggeredEvent(data as InjectionInterceptResponse);
           return data;
         }
         return {};

@@ -130,6 +130,8 @@ const chatbotBackendLabels: Record<string, string> = {
 const VRM_STATUS_EVENT = 'amica:vrm-status';
 const AVATAR_STATUS_EVENT = 'amica:avatar-status';
 const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
+const MCP_TRIGGERED_EVENT = 'amica:mcp-triggered';
+const MCP_INTERCEPTED_EVENT = 'amica:mcp-intercepted';
 
 const LICENSE_NOTICES = [
   {
@@ -518,6 +520,13 @@ export default function Home() {
   }, [informationView]);
 
   const [showMoshi, setShowMoshi] = useState(false);
+  const [lastMcpTrigger, setLastMcpTrigger] = useState<{
+    at: number;
+    serverId: string;
+    toolName: string;
+  } | null>(null);
+  const [lastInterceptAt, setLastInterceptAt] = useState<number | null>(null);
+  const lastMcpTriggerKeyRef = useRef('');
   const mainMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
   const selectedDomainIdRef = useRef(selectedDomainId);
@@ -912,6 +921,109 @@ export default function Home() {
   }, [chatLog]);
 
   useEffect(() => {
+    if (chatLog.length === 0) {
+      return;
+    }
+
+    const latestMessage = chatLog[chatLog.length - 1];
+    if (!latestMessage || latestMessage.role !== 'assistant') {
+      return;
+    }
+
+    const usedByMcpInfo = Boolean(latestMessage.mcpInfo?.used);
+    const toolNameFromDbResult = latestMessage.dbResult?.toolName || '';
+    if (!usedByMcpInfo && !toolNameFromDbResult) {
+      return;
+    }
+
+    const triggerAt = typeof latestMessage.createdAt === 'number' ? latestMessage.createdAt : Date.now();
+    const serverId = latestMessage.mcpInfo?.serverId || '';
+    const toolName = latestMessage.mcpInfo?.toolName || toolNameFromDbResult;
+    const triggerKey = `${triggerAt}:${serverId}:${toolName}`;
+
+    if (lastMcpTriggerKeyRef.current === triggerKey) {
+      return;
+    }
+
+    lastMcpTriggerKeyRef.current = triggerKey;
+    setLastMcpTrigger({
+      at: triggerAt,
+      serverId,
+      toolName,
+    });
+  }, [chatLog]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleMcpTriggered = (event: Event) => {
+      const customEvent = event as CustomEvent<{ at?: number; serverId?: string; toolName?: string }>;
+      const triggerAt = typeof customEvent.detail?.at === 'number' ? customEvent.detail.at : Date.now();
+      const serverId = customEvent.detail?.serverId || '';
+      const toolName = customEvent.detail?.toolName || '';
+      const triggerKey = `${triggerAt}:${serverId}:${toolName}`;
+
+      if (lastMcpTriggerKeyRef.current === triggerKey) {
+        return;
+      }
+
+      lastMcpTriggerKeyRef.current = triggerKey;
+      setLastMcpTrigger({
+        at: triggerAt,
+        serverId,
+        toolName,
+      });
+    };
+
+    window.addEventListener(MCP_TRIGGERED_EVENT, handleMcpTriggered as EventListener);
+    return () => {
+      window.removeEventListener(MCP_TRIGGERED_EVENT, handleMcpTriggered as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!lastMcpTrigger) {
+      return;
+    }
+
+    const remainingMs = 15000 - (Date.now() - lastMcpTrigger.at);
+    if (remainingMs <= 0) {
+      setLastMcpTrigger(null);
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setLastMcpTrigger(null);
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [lastMcpTrigger]);
+
+  useEffect(() => {
+    if (lastInterceptAt === null) {
+      return;
+    }
+
+    const remainingMs = 8000 - (Date.now() - lastInterceptAt);
+    if (remainingMs <= 0) {
+      setLastInterceptAt(null);
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setLastInterceptAt(null);
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [lastInterceptAt]);
+
+  useEffect(() => {
     const entries = mapMessagesToHistoryEntries(
       chatLog,
       sessionManager.getSessionId() || undefined,
@@ -990,6 +1102,23 @@ export default function Home() {
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleIntercepted = (event: Event) => {
+      const customEvent = event as CustomEvent<{ at?: number }>;
+      const triggerAt = typeof customEvent.detail?.at === 'number' ? customEvent.detail.at : Date.now();
+      setLastInterceptAt(triggerAt);
+    };
+
+    window.addEventListener(MCP_INTERCEPTED_EVENT, handleIntercepted as EventListener);
+    return () => {
+      window.removeEventListener(MCP_INTERCEPTED_EVENT, handleIntercepted as EventListener);
     };
   }, []);
 
@@ -1459,6 +1588,27 @@ export default function Home() {
   const showDefaultArkCoreAvatar =
     (!hasConfiguredImageAvatar || avatarDisplayState === 'error') &&
     (!hasConfiguredVrm || vrmDisplayState !== 'ready');
+  const isMcpRecentlyTriggered = Boolean(lastMcpTrigger);
+  const isInterceptRecentlyTriggered = Boolean(lastInterceptAt);
+  const isMcpChecking = chatProcessing && config('injection_tool_enabled')?.toLowerCase() === 'true';
+  const activeMcpServerKey = (lastMcpTrigger?.serverId || '').trim().toLowerCase();
+  const activeMcpToolName = (lastMcpTrigger?.toolName || '').trim();
+  const isActiveMcpServerName = (name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (!activeMcpServerKey || !normalized) {
+      return false;
+    }
+
+    return normalized.includes(activeMcpServerKey) || activeMcpServerKey.includes(normalized);
+  };
+  const activeMcpDisplayName = (() => {
+    if (!activeMcpServerKey) {
+      return '';
+    }
+
+    const matched = attachedPackDetails.mcpServers.find((name) => isActiveMcpServerName(name));
+    return matched || lastMcpTrigger?.serverId || '';
+  })();
   const showAvatarLoadingScreen =
     launcherStartingDomainId !== null ||
     (hasConfiguredVrm ? vrmDisplayState === 'loading' : avatarDisplayState === 'loading');
@@ -1551,7 +1701,13 @@ export default function Home() {
           className={clsx(
             "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold tracking-wide",
             attachedPackDetails.isReachable
-              ? "bg-emerald-600/30 text-emerald-300"
+              ? isMcpRecentlyTriggered
+                ? "bg-amber-500/35 text-amber-100"
+                : isMcpChecking
+                  ? "bg-sky-500/30 text-sky-100"
+                : isInterceptRecentlyTriggered
+                  ? "bg-cyan-500/30 text-cyan-100"
+                : "bg-emerald-600/30 text-emerald-300"
               : "bg-red-600/30 text-red-300"
           )}
         >
@@ -1559,13 +1715,42 @@ export default function Home() {
             className={clsx(
               "inline-block h-1.5 w-1.5 rounded-full",
               attachedPackDetails.isReachable
-                ? "bg-emerald-400"
+                ? isMcpRecentlyTriggered
+                  ? "bg-amber-300 animate-pulse"
+                  : isMcpChecking
+                    ? "bg-sky-300 animate-pulse"
+                  : isInterceptRecentlyTriggered
+                    ? "bg-cyan-300 animate-pulse"
+                  : "bg-emerald-400"
                 : "bg-red-400"
             )}
           />
           <span className="min-w-0 flex-1 truncate">
-            {!attachedPackDetails.isReachable ? "サーバー停止中" : "接続中"}
+            {!attachedPackDetails.isReachable
+              ? "サーバー停止中"
+              : isMcpRecentlyTriggered
+                ? "接続中 ! MCP実行"
+                : isMcpChecking
+                  ? "接続中 • MCP確認中"
+                : isInterceptRecentlyTriggered
+                  ? "接続中 • MCP検出"
+                  : "接続中"}
           </span>
+          {isMcpRecentlyTriggered && (
+            <span className="animate-pulse rounded bg-amber-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-100">
+              !
+            </span>
+          )}
+          {!isMcpRecentlyTriggered && isInterceptRecentlyTriggered && (
+            <span className="animate-pulse rounded bg-cyan-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-cyan-100">
+              *
+            </span>
+          )}
+          {!isMcpRecentlyTriggered && !isInterceptRecentlyTriggered && isMcpChecking && (
+            <span className="animate-pulse rounded bg-sky-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-100">
+              ...
+            </span>
+          )}
           {isMobileViewport && (
             <button
               type="button"
@@ -1595,6 +1780,12 @@ export default function Home() {
             <div className="text-[10px] leading-relaxed text-white/75 break-all">
               AI: {currentChatbotLabel}{currentAIModel ? ` (${currentAIModel})` : ''}
             </div>
+            {isMcpRecentlyTriggered && (
+              <div className="text-[10px] font-semibold leading-relaxed text-amber-200/95 break-all">
+                MCP発火: {lastMcpTrigger?.toolName || 'tool unknown'}
+                {lastMcpTrigger?.serverId ? ` @ ${lastMcpTrigger.serverId}` : ''}
+              </div>
+            )}
           </div>
 
           {/* MCP セクション */}
@@ -1602,6 +1793,11 @@ export default function Home() {
             <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">
               MCP
             </div>
+            {isMcpRecentlyTriggered && (activeMcpDisplayName || activeMcpToolName) && (
+              <div className="mb-1 rounded border border-amber-300/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100">
+                実行: {activeMcpDisplayName || '不明なMCP'}{activeMcpToolName ? ` / ${activeMcpToolName}` : ''}
+              </div>
+            )}
             {attachedPackDetails.mcpServers.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {attachedPackDetails.mcpServers.map((name) => (
@@ -1609,6 +1805,9 @@ export default function Home() {
                     key={name}
                     className={clsx(
                       "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight",
+                      isMcpRecentlyTriggered && isActiveMcpServerName(name)
+                        ? "animate-pulse border border-amber-300/50 bg-amber-400/25 text-amber-100"
+                        :
                       attachedPackDetails.isReachable
                         ? "bg-emerald-500/20 text-emerald-200"
                         : "bg-red-500/20 text-red-200"
