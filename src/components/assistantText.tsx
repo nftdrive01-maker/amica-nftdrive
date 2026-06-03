@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 import { config } from "@/utils/config";
 import { normalizeThemeColor } from "@/utils/domainTheme";
 import { stripDisplayControlTags } from "@/utils/stringProcessing";
-import { ChatDbResult } from "@/features/chat/messages";
+import { ChatDbResult, type Message } from "@/features/chat/messages";
 import { DbResultPanel } from "./dbResultPanel";
 
 function sanitizeUrl(url: string): string {
@@ -191,10 +191,12 @@ function splitChronicleBlock(text: string): {
 export const AssistantText = ({
   message,
   dbResult: dbResultProp,
+  attachment,
   compact = false,
 }: {
   message: string;
   dbResult?: ChatDbResult;
+  attachment?: Message["attachment"];
   compact?: boolean;
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -223,8 +225,21 @@ export const AssistantText = ({
                 {`${config('name')}:`}
               </span>
             </div>
-            <div className={clsx("overflow-y-auto pb-3 pt-1", compact ? "max-h-[19vh]" : "max-h-[calc(75vh)]")}>
+            <div className={clsx("scroll-card overflow-y-auto pb-3 pt-1", compact ? "max-h-[19vh]" : "max-h-[25vh]")}>
               <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-[15px] font-semibold leading-[1.5] text-white/95 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[25px]">
+                {attachment?.kind === "image" && (
+                  <div className="mb-3 rounded-md border border-slate-200/20 bg-slate-950/20 p-3">
+                    <div className="mb-2 text-xs font-semibold text-cyan-200">添付画像</div>
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.fileName || "attached image"}
+                      className="max-h-36 w-auto rounded-md border border-slate-200/20 object-contain"
+                    />
+                    {attachment.fileName && (
+                      <div className="mt-2 text-xs text-slate-200/80">{attachment.fileName}</div>
+                    )}
+                  </div>
+                )}
                 {chipLabel && chronicleContent && (
                   <div className="mb-3 bg-slate-950/12 px-3 py-2 backdrop-blur-[2px]">
                     <div className="mb-2 inline-flex items-center text-[13px] font-bold tracking-[0.18em] text-cyan-200">

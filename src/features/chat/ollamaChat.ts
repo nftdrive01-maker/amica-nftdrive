@@ -181,13 +181,27 @@ export async function getOllamaVisionChatResponse(messages: Message[], imageData
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+
+  const lastUserMessageIndex = [...messages].map((message, index) => ({ message, index }))
+    .reverse()
+    .find(({ message }) => message.role === "user")?.index ?? messages.length - 1;
+  const visionMessages = messages.map((message, index) => {
+    if (index !== lastUserMessageIndex || message.role !== "user") {
+      return message;
+    }
+
+    return {
+      ...message,
+      images: [imageData],
+    } as Message & { images: string[] };
+  });
+
   const res = await fetch(`/api/chat`, {
     headers: headers,
     method: "POST",
     body: JSON.stringify({
       model: config("vision_ollama_model"),
-      messages,
-      images: [imageData],
+      messages: visionMessages,
       stream: false,
     }),
   });
@@ -197,5 +211,5 @@ export async function getOllamaVisionChatResponse(messages: Message[], imageData
   }
 
   const json = await res.json();
-  return json.response;
+  return json?.message?.content ?? json?.response ?? "";
 }

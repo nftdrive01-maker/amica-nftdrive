@@ -19,7 +19,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { messages, model, ...rest } = body;
-    const hasVisionImages = Array.isArray((rest as { images?: unknown[] }).images) && ((rest as { images?: unknown[] }).images?.length || 0) > 0;
+    const hasTopLevelVisionImages = Array.isArray((rest as { images?: unknown[] }).images) && ((rest as { images?: unknown[] }).images?.length || 0) > 0;
+    const hasNestedVisionImages = Array.isArray(messages) && messages.some((message: any) => Array.isArray(message?.images) && message.images.length > 0);
+    const hasVisionImages = hasTopLevelVisionImages || hasNestedVisionImages;
 
     // クライアント（chat.ts）からsystemメッセージが来ていればそれを優先する
     // systemが無い場合のみ環境変数で補完する

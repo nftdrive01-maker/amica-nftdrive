@@ -1,5 +1,5 @@
 ﻿import { Queue } from "typescript-collections";
-import { Message, Role, Screenplay, Talk, textsToScreenplay } from "./messages";
+import { Message, Role, Screenplay, Talk, textsToScreenplay, type ChatImageAttachment } from "./messages";
 import { Viewer } from "@/features/vrmViewer/viewer";
 import { Alert } from "@/features/alert/alert";
 
@@ -238,6 +238,7 @@ export class Chat {
   private currentAssistantMessage: string;
   private currentAssistantDbResult?: Message["dbResult"];
   private currentAssistantMcpInfo?: Message["mcpInfo"];
+  private currentAssistantAttachment?: ChatImageAttachment;
   private currentAssistantHistoryId?: string;
   private currentAssistantDomainId?: string;
   private currentAssistantCreatedAt?: number;
@@ -245,6 +246,7 @@ export class Chat {
   private currentUserHistoryId?: string;
   private currentUserDomainId?: string;
   private currentUserCreatedAt?: number;
+  private currentUserAttachment?: ChatImageAttachment;
   private thoughtMessage: string;
   private pendingDbResult?: Message["dbResult"];
   private pendingMcpInfo?: Message["mcpInfo"];
@@ -286,6 +288,7 @@ export class Chat {
     this.currentAssistantMessage = "";
     this.currentAssistantDbResult = undefined;
     this.currentAssistantMcpInfo = undefined;
+    this.currentAssistantAttachment = undefined;
     this.currentAssistantHistoryId = undefined;
     this.currentAssistantDomainId = undefined;
     this.currentAssistantCreatedAt = undefined;
@@ -293,6 +296,7 @@ export class Chat {
     this.currentUserHistoryId = undefined;
     this.currentUserDomainId = undefined;
     this.currentUserCreatedAt = undefined;
+    this.currentUserAttachment = undefined;
     this.thoughtMessage = "";
     this.pendingDbResult = undefined;
     this.pendingMcpInfo = undefined;
@@ -454,6 +458,7 @@ export class Chat {
     this.currentAssistantMessage = "";
     this.currentAssistantDbResult = undefined;
     this.currentAssistantMcpInfo = undefined;
+    this.currentAssistantAttachment = undefined;
     this.currentAssistantHistoryId = undefined;
     this.currentAssistantDomainId = undefined;
     this.currentAssistantCreatedAt = undefined;
@@ -461,6 +466,7 @@ export class Chat {
     this.currentUserHistoryId = undefined;
     this.currentUserDomainId = undefined;
     this.currentUserCreatedAt = undefined;
+    this.currentUserAttachment = undefined;
     this.setChatLog!(this.messageList!);
     this.setAssistantMessage!(this.currentAssistantMessage);
     this.setAssistantDbResult?.(undefined);
@@ -697,7 +703,7 @@ export class Chat {
     });
   }
 
-  public bubbleMessage(role: Role, text: string) {
+  public bubbleMessage(role: Role, text: string, attachment?: ChatImageAttachment) {
     // TODO: currentUser & Assistant message should be contain the message with emotion in it
 
     if (role === "user") {
@@ -705,6 +711,9 @@ export class Chat {
         this.currentUserHistoryId = generateHistoryId();
         this.currentUserCreatedAt = Date.now();
         this.currentUserDomainId = this.currentUserDomainId || "default";
+        this.currentUserAttachment = attachment;
+      } else if (!this.currentUserAttachment && attachment) {
+        this.currentUserAttachment = attachment;
       }
 
       // add space if there is already a partial message
@@ -740,6 +749,7 @@ export class Chat {
         {
           role: "user",
           content: this.currentUserMessage,
+          attachment: this.currentUserAttachment,
           historyId: this.currentUserHistoryId,
           domainId: this.currentUserDomainId,
           createdAt: this.currentUserCreatedAt,
@@ -752,6 +762,7 @@ export class Chat {
         this.currentAssistantHistoryId = generateHistoryId();
         this.currentAssistantCreatedAt = Date.now();
         this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
+        this.currentAssistantAttachment = this.currentUserAttachment;
       }
 
       if (this.currentAssistantMessage === "" && this.pendingDbResult) {
@@ -776,6 +787,7 @@ export class Chat {
           content: this.currentAssistantMessage,
           dbResult: this.currentAssistantDbResult,
           mcpInfo: this.currentAssistantMcpInfo,
+          attachment: this.currentAssistantAttachment,
           historyId: this.currentAssistantHistoryId,
           domainId: this.currentAssistantDomainId,
           createdAt: this.currentAssistantCreatedAt,
@@ -784,6 +796,7 @@ export class Chat {
         this.currentAssistantMessage = text;
         this.currentAssistantDbResult = nextAssistantDbResult;
         this.currentAssistantMcpInfo = this.pendingMcpInfo;
+        this.currentAssistantAttachment = this.currentUserAttachment;
         this.currentAssistantHistoryId = generateHistoryId();
         this.currentAssistantCreatedAt = Date.now();
         this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
@@ -799,12 +812,14 @@ export class Chat {
             content: this.currentAssistantMessage,
             dbResult: this.currentAssistantDbResult,
             mcpInfo: this.currentAssistantMcpInfo,
+            attachment: this.currentAssistantAttachment,
             historyId: this.currentAssistantHistoryId,
             domainId: this.currentAssistantDomainId,
             createdAt: this.currentAssistantCreatedAt,
           });
           this.currentAssistantDbResult = nextAssistantDbResult;
           this.currentAssistantMcpInfo = this.pendingMcpInfo;
+          this.currentAssistantAttachment = this.currentUserAttachment;
           this.currentAssistantHistoryId = generateHistoryId();
           this.currentAssistantCreatedAt = Date.now();
           this.currentAssistantDomainId = this.currentUserDomainId || this.currentAssistantDomainId || "default";
@@ -827,6 +842,7 @@ export class Chat {
         this.messageList!.push({
           role: "user",
           content: this.currentUserMessage,
+          attachment: this.currentUserAttachment,
           historyId: this.currentUserHistoryId,
           domainId: this.currentUserDomainId,
           createdAt: this.currentUserCreatedAt,
@@ -836,6 +852,7 @@ export class Chat {
         this.currentUserHistoryId = undefined;
         this.currentUserDomainId = undefined;
         this.currentUserCreatedAt = undefined;
+        this.currentUserAttachment = undefined;
       }
 
       this.setChatLog!([
@@ -845,6 +862,7 @@ export class Chat {
           content: this.currentAssistantMessage,
           dbResult: this.currentAssistantDbResult,
           mcpInfo: this.currentAssistantMcpInfo,
+          attachment: this.currentAssistantAttachment,
           historyId: this.currentAssistantHistoryId,
           domainId: this.currentAssistantDomainId,
           createdAt: this.currentAssistantCreatedAt,
@@ -894,6 +912,7 @@ export class Chat {
     }
 
     message = normalizedMessage;
+    this.setChatProcessing?.(true);
     const effectiveDomainId = (domainId || this.currentUserDomainId || resolveActiveDomainId()).trim() || 'default';
     this.currentUserDomainId = effectiveDomainId;
 
@@ -976,6 +995,7 @@ export class Chat {
           }
           this.bubbleMessage("assistant", chronicleOnlyBlock);
           this.bubbleMessage("assistant", reactionMessage);
+          this.setChatProcessing?.(false);
           return;
         }
       }
@@ -1008,6 +1028,7 @@ export class Chat {
       }
 
       this.bubbleMessage("assistant", failureReactionMessage);
+      this.setChatProcessing?.(false);
       return;
     }
 
@@ -1042,7 +1063,10 @@ export class Chat {
 
     // console.debug('messages', messages);
 
-    await this.makeAndHandleStream(messages, effectiveDomainId, amicaLife);
+    const streamResult = await this.makeAndHandleStream(messages, effectiveDomainId, amicaLife);
+    if (typeof streamResult === "string") {
+      this.setChatProcessing?.(false);
+    }
   }
 
   public initSSE() {
@@ -1158,6 +1182,7 @@ export class Chat {
       } else {
         this.alert?.error("Failed to get chat response", errMsg);
       }
+      this.setChatProcessing?.(false);
       return errMsg;
     }
 
@@ -1165,6 +1190,7 @@ export class Chat {
       const errMsg = "Error: Null stream encountered.";
       console.error(errMsg);
       this.alert?.error("Null stream encountered", errMsg);
+      this.setChatProcessing?.(false);
       return errMsg;
     }
 
@@ -1425,9 +1451,10 @@ export class Chat {
     return getEchoChatResponseStream(messages);
   }
 
-  public async getVisionResponse(imageData: string) {
+  public async getVisionResponse(imageData: string, prompt?: string, domainId?: string) {
     try {
       const visionBackend = config("vision_backend");
+      const visionPrompt = prompt?.trim() || "Describe the image as accurately as possible";
 
       console.debug("vision_backend", visionBackend);
 
@@ -1438,7 +1465,7 @@ export class Chat {
           ...this.messageList!,
           {
             role: "user",
-            content: "Describe the image as accurately as possible",
+            content: visionPrompt,
           },
         ];
 
@@ -1449,7 +1476,7 @@ export class Chat {
           ...this.messageList!,
           {
             role: "user",
-            content: "Describe the image as accurately as possible",
+            content: visionPrompt,
           },
         ];
 
@@ -1464,7 +1491,7 @@ export class Chat {
             content: [
               {
                 type: "text",
-                text: "Describe the image as accurately as possible",
+                text: visionPrompt,
               },
               {
                 type: "image_url",
@@ -1482,14 +1509,19 @@ export class Chat {
         return;
       }
 
+      const visionSummary = res?.trim() || "画像の内容を十分に取得できませんでした";
+      const followUpPrompt = prompt?.trim()
+        ? `This is an attached image. The user's request was: ${prompt.trim()}. The image was described between [[ and ]] : [[${visionSummary}]] Please respond accordingly and as though you can see it.`
+        : `This is a picture I just took from my webcam (described between [[ and ]] ): [[${visionSummary}]] Please respond accordingly and as if it were just sent and as though you can see it.`;
+
       await this.makeAndHandleStream([
         { role: "system", content: config("system_prompt") },
         ...this.messageList!,
         {
           role: "user",
-          content: `This is a picture I just took from my webcam (described between [[ and ]] ): [[${res}]] Please respond accordingly and as if it were just sent and as though you can see it.`,
+          content: followUpPrompt,
         },
-      ]);
+      ], domainId);
     } catch (e: any) {
       console.error("getVisionResponse", e.toString());
       this.alert?.error("Failed to get vision response", e.toString());

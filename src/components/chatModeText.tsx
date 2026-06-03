@@ -165,6 +165,7 @@ export const ChatModeText = ({ messages }: { messages: Message[] }) => {
                                             message={(msg.content as string)}
                                             dbResult={msg.dbResult}
                                             mcpInfo={msg.mcpInfo}
+                                            attachment={msg.attachment}
                                             num={i}
                                             onOpenResult={openOverlay}
                                             activeResultSignature={isOverlayOpen ? overlayResultSignature : ""}
@@ -257,21 +258,23 @@ function splitChronicleBlock(text: string): {
 }
 
 function Chat({
-    role,
-    message,
-    dbResult: dbResultProp,
-    mcpInfo,
-    num,
-    onOpenResult,
-    activeResultSignature,
+  role,
+  message,
+  dbResult: dbResultProp,
+  mcpInfo,
+  attachment,
+  num,
+  onOpenResult,
+  activeResultSignature,
 }: {
-    role: string;
-    message: string;
-    dbResult?: ChatDbResult;
-    mcpInfo?: ChatMcpInfo;
-    num: number;
-    onOpenResult: (dbResult: ChatDbResult) => void;
-    activeResultSignature: string;
+  role: string;
+  message: string;
+  dbResult?: ChatDbResult;
+  mcpInfo?: ChatMcpInfo;
+  attachment?: Message["attachment"];
+  num: number;
+  onOpenResult: (dbResult: ChatDbResult) => void;
+  activeResultSignature: string;
 }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const accentColor = normalizeThemeColor(config('theme_color'));
@@ -312,8 +315,21 @@ function Chat({
                         )}
                     </div>
                     {role === "assistant" && (
-                        <div className="overflow-y-auto pb-3 pt-1 max-h-[calc(75vh)]">
+                        <div className="scroll-card overflow-y-auto pb-3 pt-1 max-h-[25vh]">
                             <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-[18px] font-semibold leading-[1.5] text-white/95 drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[25px]">
+                                {attachment?.kind === "image" && (
+                                    <div className="mb-3 rounded-md border border-slate-200/20 bg-slate-950/20 p-3">
+                                        <div className="mb-2 text-xs font-semibold text-cyan-200">添付画像</div>
+                                        <img
+                                            src={attachment.dataUrl}
+                                            alt={attachment.fileName || "attached image"}
+                                            className="max-h-36 w-auto rounded-md border border-slate-200/20 object-contain"
+                                        />
+                                        {attachment.fileName && (
+                                            <div className="mt-2 text-xs text-slate-200/80">{attachment.fileName}</div>
+                                        )}
+                                    </div>
+                                )}
                                 {chipLabel && chronicleContent && (
                                     <div className="mb-3 bg-slate-950/12 px-3 py-2 backdrop-blur-[2px]">
                                         <div className="mb-2 inline-flex items-center text-[13px] font-bold tracking-[0.18em] text-cyan-200">
@@ -348,6 +364,19 @@ function Chat({
                     {role === "user" && (
                         <div className="max-h-36 overflow-y-auto pb-3 pt-0.5">
                             <div className="min-h-8 max-h-full whitespace-pre-wrap break-words text-right text-[17px] font-semibold leading-[1.5] text-white drop-shadow-[0_2px_10px_rgba(15,23,42,0.45)] sm:text-[22px]">
+                                {attachment?.kind === "image" && (
+                                    <div className="mb-3 ml-auto max-w-[220px] rounded-md border border-cyan-200/20 bg-cyan-50/10 p-2.5 text-left">
+                                        <div className="mb-2 text-xs font-semibold text-cyan-100">添付画像</div>
+                                        <img
+                                            src={attachment.dataUrl}
+                                            alt={attachment.fileName || "attached image"}
+                                            className="max-h-28 w-full rounded-md border border-cyan-100/20 object-contain"
+                                        />
+                                        {attachment.fileName && (
+                                            <div className="mt-2 text-xs text-cyan-50/80">{attachment.fileName}</div>
+                                        )}
+                                    </div>
+                                )}
                                 {normalizedMessage}
                                 <div ref={scrollRef} />
                             </div>

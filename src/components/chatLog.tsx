@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+﻿import { useTranslation } from 'react-i18next';
 import { clsx } from "clsx";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import FlexTextarea from "@/components/flexTextarea/flexTextarea";
@@ -139,6 +139,7 @@ export const ChatLog = ({
                   role={msg.role}
                   message={(msg.content as string)}
                   dbResult={msg.dbResult}
+                  attachment={msg.attachment}
                   num={i}
                   onClickResumeButton={handleResumeButtonClick}
                 />
@@ -356,12 +357,14 @@ function Chat({
   role,
   message,
   dbResult: dbResultProp,
+  attachment,
   num,
   onClickResumeButton
 }: {
   role: string;
   message: string;
   dbResult?: ChatDbResult;
+  attachment?: Message["attachment"];
   num: number;
   onClickResumeButton: (num: number, message: string) => void;
 }) {
@@ -402,6 +405,19 @@ function Chat({
           <div className='typography-16 text-[14px] sm:text-[16px] font-M_PLUS_2 font-bold text-gray-800 whitespace-pre-wrap break-words leading-relaxed'>
             {role === "assistant" ? (
               <div>
+                {attachment?.kind === "image" && (
+                  <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 text-xs font-semibold text-slate-600">添付画像</div>
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.fileName || "attached image"}
+                      className="max-h-40 w-auto rounded-md border border-slate-200 object-contain"
+                    />
+                    {attachment.fileName && (
+                      <div className="mt-2 text-xs text-slate-500">{attachment.fileName}</div>
+                    )}
+                  </div>
+                )}
                 {chipLabel && chronicleContent && (() => {
                   const citationSeparator = /--- 出典 ---/;
                   const [mainText, ...citationParts] = chronicleContent.split(citationSeparator);
@@ -425,9 +441,24 @@ function Chat({
                 <div>{renderMultilineWithLinks(plainMessage)}</div>
               </div>
             ) : (
-              <FlexTextarea
-                value={message}
-              />
+              <div className="space-y-3">
+                {attachment?.kind === "image" && (
+                  <div className="ml-auto max-w-[220px] rounded-md border border-cyan-200 bg-cyan-50 p-2.5 text-left">
+                    <div className="mb-2 text-xs font-semibold text-cyan-700">添付画像</div>
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.fileName || "attached image"}
+                      className="max-h-32 w-full rounded-md border border-cyan-100 object-contain"
+                    />
+                    {attachment.fileName && (
+                      <div className="mt-2 text-xs text-cyan-700/80">{attachment.fileName}</div>
+                    )}
+                  </div>
+                )}
+                <FlexTextarea
+                  value={message}
+                />
+              </div>
             )}
           </div>
         </div>

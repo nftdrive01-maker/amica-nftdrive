@@ -83,6 +83,15 @@ import { getPersistentUserId } from "@/lib/userIdentity";
 import { clearDomainAccessSession, hasDomainAccessSession } from '@/lib/domainAccessSession';
 import { buildUrl } from "@/utils/buildUrl";
 
+function getActiveOverlayAttachment(messages: Message[], role: Role): Message["attachment"] | undefined {
+  const latestMessage = messages[messages.length - 1];
+  if (!latestMessage || latestMessage.role !== role) {
+    return undefined;
+  }
+
+  return latestMessage.attachment?.kind === "image" ? latestMessage.attachment : undefined;
+}
+
 const m_plus_2 = M_PLUS_2({
   variable: "--font-m-plus-2",
   display: "swap",
@@ -487,6 +496,7 @@ export default function Home() {
   const [showSubconciousText, setShowSubconciousText] = useState(false);
   const [showMainMenu, setShowMainMenu] = useState(false);
   const [informationView, setInformationView] = useState<InformationView | null>(null);
+  const activeOverlayAttachment = getActiveOverlayAttachment(chatLog, shownMessage);
 
   useEffect(() => {
     void updateConfig("show_chat_mode", showChatMode ? "true" : "false");
@@ -2164,11 +2174,16 @@ export default function Home() {
               key={`assistant-${domainDisplayVersion}`}
               message={assistantMessage}
               dbResult={assistantDbResult}
+              attachment={activeOverlayAttachment}
               compact={isMobileViewport && showCompactMobileChatCard}
             />
           )}
           { shownMessage === 'user' && (
-            <UserText message={userMessage} compact={isMobileViewport && showCompactMobileChatCard} />
+            <UserText
+              message={userMessage}
+              attachment={activeOverlayAttachment}
+              compact={isMobileViewport && showCompactMobileChatCard}
+            />
           )}
         </>
       )}

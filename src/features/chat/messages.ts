@@ -18,12 +18,20 @@ export type ChatMcpInfo = {
   toolName?: string;
 };
 
+export type ChatImageAttachment = {
+  kind: "image";
+  dataUrl: string;
+  fileName?: string;
+  mimeType?: string;
+};
+
 // ChatGPT API
 export type Message = {
   role: Role;
   content: string; // this can be a string or like {type: "image", image_url: {url: "https://example.com/image.jpg"} } but the typing for it sucks
   dbResult?: ChatDbResult;
   mcpInfo?: ChatMcpInfo;
+  attachment?: ChatImageAttachment;
   historyId?: string;
   domainId?: string;
   createdAt?: number;

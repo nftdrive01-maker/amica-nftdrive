@@ -1,4 +1,4 @@
-import * as ort from "onnxruntime-web"
+﻿import * as ort from "onnxruntime-web"
 ort.env.wasm.wasmPaths = '/_next/static/chunks/'
 
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import { hasDomainAccessSession, setDomainAccessSession } from "@/lib/domainAcce
 import { ViewerContext } from "@/features/vrmViewer/viewerContext";
 import { buildUrl } from "@/utils/buildUrl";
 import { createWebSpeechTranscriber, isWebSpeechSupported, WebSpeechAudioLevel, WebSpeechController } from "@/features/webSpeech/webSpeech";
+import type { ChatImageAttachment } from "@/features/chat/messages";
 
 type DomainOption = PublicDomainOption;
 
@@ -196,6 +197,8 @@ export default function MessageInput({
   const [domainAccessError, setDomainAccessError] = useState('');
   const [domainAccessBusy, setDomainAccessBusy] = useState(false);
   const [dismissedDomainAccessDomainId, setDismissedDomainAccessDomainId] = useState('');
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [attachedImage, setAttachedImage] = useState<ChatImageAttachment | null>(null);
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
@@ -1124,6 +1127,75 @@ export default function MessageInput({
     interruptAssistantForUserInput();
   }
 
+  function stripDataUrlPrefix(dataUrl: string): string {
+    return dataUrl.replace(/^data:[^;]+;base64,/, '');
+  }
+
+  function clearAttachment() {
+    setAttachedImage(null);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = '';
+    }
+  }
+
+  function openAttachmentPicker() {
+    attachmentInputRef.current?.click();
+  }
+
+  function handleAttachmentChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (!dataUrl) {
+        return;
+      }
+
+      setAttachedImage({
+        kind: 'image',
+        dataUrl,
+        fileName: file.name,
+        mimeType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handlePasteIntoInput(event: React.ClipboardEvent<HTMLInputElement>) {
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type.startsWith('image/'));
+    if (!imageItem) {
+      return;
+    }
+
+    const file = imageItem.getAsFile();
+    if (!file) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (!dataUrl) {
+        return;
+      }
+
+      setAttachedImage({
+        kind: 'image',
+        dataUrl,
+        fileName: file.name || 'clipboard-image.png',
+        mimeType: file.type,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
   const isWebSpeechBackend = config('stt_backend') === 'web_speech';
   const gazeSupportWarnedRef = useRef(false);
   const gazePermissionWarnedRef = useRef(false);
@@ -1654,8 +1726,25 @@ export default function MessageInput({
       return;
     }
 
-    const messageToSend = chronicleEnabledForInput ? `[[USE_CHRONICLE]] ${userMessage}` : userMessage;
-    bot.receiveMessageFromUser(messageToSend, false, selectedDomain);
+    const trimmedMessage = userMessage.trim();
+    if (!trimmedMessage && !attachedImage) {
+      return;
+    }
+
+    if (attachedImage) {
+      const userBubbleText = trimmedMessage || "画像を添付しました";
+      bot.setChatProcessing?.(true);
+      bot.bubbleMessage("user", userBubbleText, attachedImage);
+      void bot.getVisionResponse(
+        stripDataUrlPrefix(attachedImage.dataUrl),
+        trimmedMessage || undefined,
+        selectedDomain,
+      );
+      clearAttachment();
+    } else {
+      const messageToSend = chronicleEnabledForInput ? `[[USE_CHRONICLE]] ${userMessage}` : userMessage;
+      bot.receiveMessageFromUser(messageToSend, false, selectedDomain);
+    }
     // only if we are using non-VAD mode should we focus on the input
     if (! vad.listening) {
       if (! hasOnScreenKeyboard()) {
@@ -1859,13 +1948,14 @@ export default function MessageInput({
               ref={inputRef}
               placeholder={config("chatbot_backend") === "moshi" ? "Disabled in moshi chatbot" : "質問してみましょう"}
               onChange={handleInputChange}
+              onPaste={handlePasteIntoInput}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   if (hasOnScreenKeyboard()) {
                     inputRef.current?.blur();
                   }
 
-                  if (userMessage === "") {
+                  if (userMessage === "" && !attachedImage) {
                     return false;
                   }
 
@@ -1880,17 +1970,58 @@ export default function MessageInput({
             </div>
           </div>
 
-          <div className='flex flex-col justify-center items-center'>
+          <div className='flex flex-row items-center justify-center gap-2'>
+            <IconButton
+              iconName="24/UploadAlt"
+              className={selectedDomainThemeColor ? "hover:brightness-110 active:brightness-95 disabled:opacity-50" : "bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
+              isProcessing={false}
+              disabled={isChatProcessing || transcriber.isModelLoading || config("chatbot_backend") === "moshi"}
+              style={accentButtonStyle}
+              onClick={openAttachmentPicker}
+            />
             <IconButton
               iconName="24/Send"
-              className={selectedDomainThemeColor ? "ml-2 hover:brightness-110 active:brightness-95 disabled:opacity-50" : "ml-2 bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
+              className={selectedDomainThemeColor ? "hover:brightness-110 active:brightness-95 disabled:opacity-50" : "bg-secondary hover:bg-secondary-hover active:bg-secondary-press disabled:bg-secondary-disabled"}
               isProcessing={isChatProcessing || transcriber.isBusy}
-              disabled={isChatProcessing || !userMessage || transcriber.isModelLoading || config("chatbot_backend") === "moshi"}
+              disabled={isChatProcessing || (!userMessage && !attachedImage) || transcriber.isModelLoading || config("chatbot_backend") === "moshi"}
               style={accentButtonStyle}
               onClick={clickedSendButton}
             />
           </div>
         </div>
+
+        {attachedImage && (
+          <div className="mt-2 rounded-md border border-slate-700/60 bg-slate-950/80 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-cyan-300">添付画像</div>
+                <div className="truncate text-[11px] text-slate-400">
+                  {attachedImage.fileName || attachedImage.mimeType || "clipboard image"}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                onClick={clearAttachment}
+              >
+                削除
+              </button>
+            </div>
+            <img
+              src={attachedImage.dataUrl}
+              alt={attachedImage.fileName || "attached image"}
+              className="mt-2 max-h-24 w-full rounded-md border border-slate-700/60 object-contain"
+            />
+          </div>
+        )}
+
+        <input
+          ref={attachmentInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAttachmentChange}
+        />
       </div>
 
       {domainAccessDialogDomain && (
