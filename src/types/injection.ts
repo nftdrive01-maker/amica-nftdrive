@@ -13,6 +13,9 @@ export interface InjectionInterceptRequest {
   /** ユーザーが入力したテキスト */
   userText: string;
 
+  /** ユーザー入力由来か（自動発話・内部発話は false） */
+  isUserInput?: boolean;
+
   /** セッションID（オプション）*/
   sessionId?: string;
 

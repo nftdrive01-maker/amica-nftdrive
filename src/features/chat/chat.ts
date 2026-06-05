@@ -980,7 +980,11 @@ export class Chat {
     const injected = await fetchInjectedContext(
       userTextForInjection,
       injectionDomainId,
-      sessionManager.getSessionId() || undefined
+      sessionManager.getSessionId() || undefined,
+      undefined,
+      {
+        isUserInput: !amicaLife,
+      }
     );
 
     if (injected.metadata) {

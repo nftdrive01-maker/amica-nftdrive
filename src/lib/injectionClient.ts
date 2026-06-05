@@ -299,7 +299,7 @@ export async function fetchInjectedContext(
   domainId?: string,
   sessionId?: string,
   messageHistory?: Array<{ role: string; content: string }>,
-  options?: { requestId?: string; attachedPackIds?: string[] }
+  options?: { requestId?: string; attachedPackIds?: string[]; isUserInput?: boolean }
 ): Promise<InjectionInterceptResponse> {
   try {
     const targetDomainId =
@@ -337,6 +337,7 @@ export async function fetchInjectedContext(
     const request: InjectionInterceptRequest = {
       requestId: options?.requestId || generateRequestId(),
       userText,
+      isUserInput: options?.isUserInput ?? true,
       domainId: targetDomainId,
       sessionId,
       attachedPackIds: options?.attachedPackIds,
