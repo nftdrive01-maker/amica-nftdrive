@@ -534,8 +534,19 @@ export default function Home() {
     at: number;
     serverId: string;
     toolName: string;
+    query: string;
   } | null>(null);
   const [lastInterceptAt, setLastInterceptAt] = useState<number | null>(null);
+  const [lastInterceptInfo, setLastInterceptInfo] = useState<{
+    at: number;
+    used: boolean;
+    serverId: string;
+    toolName: string;
+    source: string;
+    error: string;
+    query: string;
+    requestId: string;
+  } | null>(null);
   const lastMcpTriggerKeyRef = useRef('');
   const mainMenuRef = useRef<HTMLDivElement>(null);
   const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
@@ -960,6 +971,7 @@ export default function Home() {
       at: triggerAt,
       serverId,
       toolName,
+      query: '',
     });
   }, [chatLog]);
 
@@ -969,10 +981,11 @@ export default function Home() {
     }
 
     const handleMcpTriggered = (event: Event) => {
-      const customEvent = event as CustomEvent<{ at?: number; serverId?: string; toolName?: string }>;
+      const customEvent = event as CustomEvent<{ at?: number; serverId?: string; toolName?: string; query?: string }>;
       const triggerAt = typeof customEvent.detail?.at === 'number' ? customEvent.detail.at : Date.now();
       const serverId = customEvent.detail?.serverId || '';
       const toolName = customEvent.detail?.toolName || '';
+      const query = customEvent.detail?.query || '';
       const triggerKey = `${triggerAt}:${serverId}:${toolName}`;
 
       if (lastMcpTriggerKeyRef.current === triggerKey) {
@@ -984,6 +997,7 @@ export default function Home() {
         at: triggerAt,
         serverId,
         toolName,
+        query,
       });
     };
 
@@ -1015,17 +1029,20 @@ export default function Home() {
 
   useEffect(() => {
     if (lastInterceptAt === null) {
+      setLastInterceptInfo(null);
       return;
     }
 
     const remainingMs = 8000 - (Date.now() - lastInterceptAt);
     if (remainingMs <= 0) {
       setLastInterceptAt(null);
+      setLastInterceptInfo(null);
       return;
     }
 
     const timerId = window.setTimeout(() => {
       setLastInterceptAt(null);
+      setLastInterceptInfo(null);
     }, remainingMs);
 
     return () => {
@@ -1121,9 +1138,28 @@ export default function Home() {
     }
 
     const handleIntercepted = (event: Event) => {
-      const customEvent = event as CustomEvent<{ at?: number }>;
+      const customEvent = event as CustomEvent<{
+        at?: number;
+        used?: boolean;
+        serverId?: string;
+        toolName?: string;
+        source?: string;
+        error?: string;
+        query?: string;
+        requestId?: string;
+      }>;
       const triggerAt = typeof customEvent.detail?.at === 'number' ? customEvent.detail.at : Date.now();
       setLastInterceptAt(triggerAt);
+      setLastInterceptInfo({
+        at: triggerAt,
+        used: Boolean(customEvent.detail?.used),
+        serverId: customEvent.detail?.serverId || '',
+        toolName: customEvent.detail?.toolName || '',
+        source: customEvent.detail?.source || '',
+        error: customEvent.detail?.error || '',
+        query: customEvent.detail?.query || '',
+        requestId: customEvent.detail?.requestId || '',
+      });
     };
 
     window.addEventListener(MCP_INTERCEPTED_EVENT, handleIntercepted as EventListener);
@@ -1619,6 +1655,13 @@ export default function Home() {
     const matched = attachedPackDetails.mcpServers.find((name) => isActiveMcpServerName(name));
     return matched || lastMcpTrigger?.serverId || '';
   })();
+  const activeMcpStatusText = isMcpRecentlyTriggered
+    ? `${activeMcpDisplayName || '不明なMCP'}${activeMcpToolName ? ` / ${activeMcpToolName}` : ''}`
+    : '';
+  const activeMcpQueryText = isMcpRecentlyTriggered ? (lastMcpTrigger?.query || '') : '';
+  const activeInterceptText = lastInterceptInfo
+    ? `${lastInterceptInfo.used ? 'MCP実行' : 'MCP試行'}${lastInterceptInfo.serverId || lastInterceptInfo.toolName ? `: ${lastInterceptInfo.serverId || 'unknown'}${lastInterceptInfo.toolName ? ` / ${lastInterceptInfo.toolName}` : ''}` : ''}${lastInterceptInfo.source ? ` (${lastInterceptInfo.source})` : ''}${lastInterceptInfo.error ? ` - ${lastInterceptInfo.error}` : ''}`
+    : '';
   const showAvatarLoadingScreen =
     launcherStartingDomainId !== null ||
     (hasConfiguredVrm ? vrmDisplayState === 'loading' : avatarDisplayState === 'loading');
@@ -1761,6 +1804,32 @@ export default function Home() {
               ...
             </span>
           )}
+            {lastInterceptInfo?.query && (
+              <div className="text-[10px] leading-relaxed text-cyan-100/85 break-all">
+                検索語: {lastInterceptInfo.query}
+              </div>
+            )}
+            {lastInterceptInfo?.requestId && (
+              <div className="text-[10px] leading-relaxed text-cyan-100/70 break-all">
+                requestId: {lastInterceptInfo.requestId}
+              </div>
+            )}
+          {isMcpRecentlyTriggered && activeMcpStatusText && (
+            <span
+              className="hidden max-w-[150px] truncate rounded bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100 md:inline-flex"
+              title={`MCP発火: ${activeMcpStatusText}`}
+            >
+              MCP発火: {activeMcpStatusText}
+            </span>
+          )}
+          {!isMcpRecentlyTriggered && isInterceptRecentlyTriggered && activeInterceptText && (
+            <span
+              className="hidden max-w-[180px] truncate rounded bg-cyan-300/20 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 md:inline-flex"
+              title={`MCP検出: ${activeInterceptText}`}
+            >
+              MCP検出: {activeInterceptText}
+            </span>
+          )}
           {isMobileViewport && (
             <button
               type="button"
@@ -1790,12 +1859,31 @@ export default function Home() {
             <div className="text-[10px] leading-relaxed text-white/75 break-all">
               AI: {currentChatbotLabel}{currentAIModel ? ` (${currentAIModel})` : ''}
             </div>
-            {isMcpRecentlyTriggered && (
-              <div className="text-[10px] font-semibold leading-relaxed text-amber-200/95 break-all">
-                MCP発火: {lastMcpTrigger?.toolName || 'tool unknown'}
-                {lastMcpTrigger?.serverId ? ` @ ${lastMcpTrigger.serverId}` : ''}
+            {activeInterceptText && (
+              <div className="text-[10px] font-semibold leading-relaxed text-cyan-200/95 break-all">
+                MCP検出: {activeInterceptText}
               </div>
             )}
+            {lastInterceptInfo?.query && (
+              <div className="text-[10px] leading-relaxed text-cyan-100/85 break-all">
+                検索語: {lastInterceptInfo.query}
+              </div>
+            )}
+            {lastInterceptInfo?.requestId && (
+              <div className="text-[10px] leading-relaxed text-cyan-100/70 break-all">
+                requestId: {lastInterceptInfo.requestId}
+              </div>
+            )}
+          {isMcpRecentlyTriggered && activeMcpStatusText && (
+            <div className="text-[10px] font-semibold leading-relaxed text-amber-200/95 break-all">
+              MCP発火: {activeMcpStatusText}
+            </div>
+          )}
+          {isMcpRecentlyTriggered && activeMcpQueryText && (
+            <div className="text-[10px] leading-relaxed text-amber-100/90 break-all">
+              検索語: {activeMcpQueryText}
+            </div>
+          )}
           </div>
 
           {/* MCP セクション */}
@@ -1806,6 +1894,11 @@ export default function Home() {
             {isMcpRecentlyTriggered && (activeMcpDisplayName || activeMcpToolName) && (
               <div className="mb-1 rounded border border-amber-300/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100">
                 実行: {activeMcpDisplayName || '不明なMCP'}{activeMcpToolName ? ` / ${activeMcpToolName}` : ''}
+              </div>
+            )}
+            {isMcpRecentlyTriggered && activeMcpQueryText && (
+              <div className="mb-1 rounded border border-amber-300/20 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-100/90 break-all">
+                検索語: {activeMcpQueryText}
               </div>
             )}
             {attachedPackDetails.mcpServers.length > 0 ? (

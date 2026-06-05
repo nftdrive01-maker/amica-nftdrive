@@ -163,6 +163,10 @@ export class Chat {
   public viewer?: Viewer;
   public alert?: Alert;
 
+  private currentResponseGuard?: {
+    forceJapanese?: boolean;
+  };
+
     // TTS向けに、意味のない記号列や装飾を除去
   private sanitizeTtsMessage(text: string): string {
     return text
@@ -209,6 +213,29 @@ export class Chat {
     const cjkChars = normalized.match(/[\u4E00-\u9FFF]/g) || [];
 
     return hasSimplifiedOnlyChars || (cjkChars.length >= 6 && chineseFunctionWords.length >= 2);
+  }
+
+  private containsLikelyEnglish(text: string): boolean {
+    if (!text) {
+      return false;
+    }
+
+    const normalized = text.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return false;
+    }
+
+    const latinLetters = normalized.match(/[A-Za-z]/g)?.length ?? 0;
+    const japaneseChars = normalized.match(/[ぁ-んァ-ヶ一-龯]/g)?.length ?? 0;
+
+    return latinLetters >= 12 && latinLetters >= japaneseChars;
+  }
+
+  private shouldForceJapaneseForCurrentResponse(): boolean {
+    return Boolean(
+      this.currentResponseGuard?.forceJapanese ||
+      this.pendingMcpInfo?.toolName === 'search_web',
+    );
   }
 
 
@@ -1054,16 +1081,31 @@ export class Chat {
       systemPrompt = `${systemPrompt}\n\n${AMICA_LIFE_JAPANESE_RULE}`;
     }
 
+    if (injected.metadata?.mcpToolName === 'search_web') {
+      systemPrompt = `${systemPrompt}\n\n[WEB検索の回答ルール]\n- 回答は必ず日本語で行うこと\n- 検索結果JSONの title / url / page_summary を優先して読むこと\n- 英語の検索結果が含まれていても、日本語に要約して答えること\n- そのまま英語で返さないこと\n- 「学習データでは〜」「現時点では〜」のような自己言及を避け、検索結果の事実だけを答えること\n- 断定する前に、検索結果の内容に基づいて短く整理して答えること`;
+    }
+
+    const contextMessages: Message[] = [];
+    if (injected.injectedUserContext) {
+      contextMessages.push({
+        role: "system",
+        content: `[参考情報]\n${injected.injectedUserContext}`,
+      });
+    }
+
     // make new stream (userはユーザーの質問のみ、ナレッジはsystemに統合済み)
     const messages: Message[] = [
       { role: "system", content: systemPrompt },
       ...this.messageList!,
+      ...contextMessages,
       { role: "user", content: userTextForModel },
     ];
 
     // console.debug('messages', messages);
 
-    const streamResult = await this.makeAndHandleStream(messages, effectiveDomainId, amicaLife);
+    const streamResult = await this.makeAndHandleStream(messages, effectiveDomainId, amicaLife, {
+      forceJapanese: injected.metadata?.mcpToolName === 'search_web',
+    });
     if (typeof streamResult === "string") {
       this.setChatProcessing?.(false);
     }
@@ -1171,12 +1213,19 @@ export class Chat {
     }
   }
 
-  public async makeAndHandleStream(messages: Message[], domainId?: string, amicaLife: boolean = false) {
+  public async makeAndHandleStream(
+    messages: Message[],
+    domainId?: string,
+    amicaLife: boolean = false,
+    responseGuard?: { forceJapanese?: boolean },
+  ) {
     try {
+      this.currentResponseGuard = responseGuard;
       this.streams.push(await this.getChatResponseStream(messages));
     } catch (e: any) {
       const errMsg = e.toString();
       console.error(errMsg);
+      this.currentResponseGuard = undefined;
       if (this.isRateLimitedError(e)) {
         this.alert?.warning("レート制限中", this.toRateLimitedMessage(e));
       } else {
@@ -1189,6 +1238,7 @@ export class Chat {
     if (this.streams[this.streams.length - 1] == null) {
       const errMsg = "Error: Null stream encountered.";
       console.error(errMsg);
+      this.currentResponseGuard = undefined;
       this.alert?.error("Null stream encountered", errMsg);
       this.setChatProcessing?.(false);
       return errMsg;
@@ -1275,6 +1325,21 @@ export class Chat {
               }
             }
 
+            if (this.shouldForceJapaneseForCurrentResponse()) {
+              const currentText = aiTalks[0]?.talk?.message || aiTalks[0]?.text || "";
+              if (this.containsLikelyEnglish(currentText)) {
+                if (insertedJapaneseFallback) {
+                  return false;
+                }
+
+                insertedJapaneseFallback = true;
+                aiTalks[0].text = "[neutral] すみません、日本語で言い直します。検索結果を日本語で整理し直しています。";
+                aiTalks[0].talk.message = "すみません、日本語で言い直します。検索結果を日本語で整理し直しています。";
+                aiTalks[0].expression = "neutral";
+                aiTalks[0].talk.style = "talk";
+              }
+            }
+
             if (!isThinking) {
               if (asyncTtsMode) {
                 this.bubbleMessage("assistant", aiTalks[0].text);
@@ -1320,6 +1385,7 @@ export class Chat {
       this.bubbleMessage!("assistant", errMsg);
       console.error(errMsg);
     } finally {
+      this.currentResponseGuard = undefined;
       if (!reader.closed) {
         reader.releaseLock();
       }
@@ -1340,6 +1406,11 @@ export class Chat {
     talk = cleanTalk(talk);
     //sanitize message for tts (remove meaningless symbols and decorations)
     talk.message = this.sanitizeTtsMessage(talk.message);
+
+    if (this.shouldForceJapaneseForCurrentResponse() && this.containsLikelyEnglish(talk.message)) {
+      talk.message = "すみません、日本語で言い直します。検索結果を日本語で整理し直しています。";
+      talk.style = "talk";
+    }
 
     if (talk.message.trim() === "" || config("tts_muted") === "true") {
       return null;

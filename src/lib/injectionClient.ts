@@ -115,7 +115,7 @@ function generateRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function emitMcpTriggeredEvent(payload: InjectionInterceptResponse): void {
+function emitMcpTriggeredEvent(payload: InjectionInterceptResponse, query?: string): void {
   if (typeof window === 'undefined') {
     return;
   }
@@ -131,12 +131,22 @@ function emitMcpTriggeredEvent(payload: InjectionInterceptResponse): void {
         at: Date.now(),
         serverId: metadata.mcpServerId || '',
         toolName: metadata.mcpToolName || '',
+        query: typeof query === 'string' ? query : '',
       },
     }),
   );
 }
 
-function emitInterceptEvent(payload: InjectionInterceptResponse): void {
+function emitInterceptEvent(
+  payload: InjectionInterceptResponse,
+  info?: {
+    source?: 'response' | 'cache' | 'empty' | 'timeout' | 'fetch_error' | 'http_error' | 'server_error';
+    error?: string;
+    used?: boolean;
+    query?: string;
+    requestId?: string;
+  },
+): void {
   if (typeof window === 'undefined') {
     return;
   }
@@ -146,9 +156,13 @@ function emitInterceptEvent(payload: InjectionInterceptResponse): void {
     new CustomEvent('amica:mcp-intercepted', {
       detail: {
         at: Date.now(),
-        used: Boolean(metadata?.mcpUsed),
+        used: typeof info?.used === 'boolean' ? info.used : Boolean(metadata?.mcpUsed),
         serverId: metadata?.mcpServerId || '',
         toolName: metadata?.mcpToolName || '',
+        source: info?.source || 'response',
+        error: info?.error || '',
+        query: info?.query || '',
+        requestId: info?.requestId || metadata?.requestId || '',
       },
     }),
   );
@@ -349,10 +363,11 @@ export async function fetchInjectedContext(
         if (data && typeof data === 'object') {
           // キャッシュに保存
           cacheInjection(targetDomainId, data);
-          emitInterceptEvent(data as InjectionInterceptResponse);
-          emitMcpTriggeredEvent(data as InjectionInterceptResponse);
+          emitInterceptEvent(data as InjectionInterceptResponse, { source: 'response', query: userText, requestId: request.requestId });
+          emitMcpTriggeredEvent(data as InjectionInterceptResponse, userText);
           return data;
         }
+        emitInterceptEvent({}, { source: 'empty', used: false, error: 'empty_response', query: userText, requestId: request.requestId });
         return {};
       } else {
         // HTTP エラー → キャッシュにフォールバック
@@ -361,8 +376,16 @@ export async function fetchInjectedContext(
         );
         const cached = getCachedInjection(targetDomainId);
         if (cached) {
+          emitInterceptEvent(cached as InjectionInterceptResponse, {
+            source: 'cache',
+            used: Boolean((cached as InjectionInterceptResponse)?.metadata?.mcpUsed),
+            error: `http_${response.status}`,
+            query: userText,
+            requestId: request.requestId,
+          });
           return cached;
         }
+        emitInterceptEvent({}, { source: 'http_error', used: false, error: `http_${response.status}`, query: userText, requestId: request.requestId });
         // サーバーエラーを明示
         return { error: 'server_error' };
       }
@@ -376,8 +399,22 @@ export async function fetchInjectedContext(
       // キャッシュからフォールバック
       const cached = getCachedInjection(targetDomainId);
       if (cached) {
+        emitInterceptEvent(cached as InjectionInterceptResponse, {
+          source: fetchErr.name === 'AbortError' ? 'timeout' : 'fetch_error',
+          used: Boolean((cached as InjectionInterceptResponse)?.metadata?.mcpUsed),
+          error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr || ''),
+          query: userText,
+          requestId: request.requestId,
+        });
         return cached;
       }
+      emitInterceptEvent({}, {
+        source: fetchErr.name === 'AbortError' ? 'timeout' : 'fetch_error',
+        used: false,
+        error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr || ''),
+        query: userText,
+        requestId: request.requestId,
+      });
       // サーバーエラーを明示
       return { error: 'server_error' };
     }
@@ -386,8 +423,22 @@ export async function fetchInjectedContext(
     const domain = domainId || 'consultation';
     const cached = getCachedInjection(domain);
     if (cached) {
+      emitInterceptEvent(cached as InjectionInterceptResponse, {
+        source: 'server_error',
+        used: Boolean((cached as InjectionInterceptResponse)?.metadata?.mcpUsed),
+        error: err instanceof Error ? err.message : String(err || 'server_error'),
+        query: userText,
+        requestId: request.requestId,
+      });
       return cached;
     }
+    emitInterceptEvent({}, {
+      source: 'server_error',
+      used: false,
+      error: err instanceof Error ? err.message : String(err || 'server_error'),
+      query: userText,
+      requestId: request.requestId,
+    });
     // サーバーエラーを明示
     return { error: 'server_error' };
   }
