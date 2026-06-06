@@ -173,6 +173,45 @@ A companion management tool that allows non-engineers to update AI's knowledge b
 
 For detailed documentation, see [Injection Tool README](../injection-tool/README.md)
 
+### Ark-i DBHub MCP result rows
+
+Ark-i uses DBHub as a PostgreSQL MCP server for database lookup and SQL execution.
+When `execute_sql` is used, the DB result panel in Amica displays the rows included in
+`dbResult.previewRows`. Amica itself does not trim DB rows to 3 items; it only renders
+the rows returned by Injection Tool.
+
+If the DB result panel shows fewer rows than expected, check the DBHub row limit.
+DBHub limits SELECT result rows with `--max-rows` / `max_rows`. In the Ark-i Docker
+Compose setup, configure the DBHub service like this:
+
+```yaml
+dbhub:
+  command:
+    - --transport
+    - http
+    - --port
+    - "8080"
+    - --max-rows
+    - "${DBHUB_MAX_ROWS:-1000}"
+    - --dsn
+    - "postgres://${DB_USER:-user}:${DB_PASSWORD:-password}@ark-database:5432/${DB_NAME:-dbname}"
+```
+
+After changing this setting, recreate DBHub from the WSL Docker environment:
+
+```bash
+docker compose up -d --force-recreate dbhub
+```
+
+Test message for `execute_sql` routing and result display:
+
+```text
+DBHub の execute_sql で次のSQLを実行してください。SELECT name, category, price_yen, stock_count FROM dbhub_test.products ORDER BY price_yen DESC;
+```
+
+Note: Web search prompt context intentionally summarizes only the first 3 web results.
+That web-search limit is separate from the DB result panel row count.
+
 ## 🔒 License
 * The majority of this project is released under the MIT license as found in the [LICENSE](https://github.com/nftdrive01-maker/amica-nftdrive/blob/feat-add-injection/LICENSE) file.
 * Assets such as 3D models and images are released under their authors respective licenses.
