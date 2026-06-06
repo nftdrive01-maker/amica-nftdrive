@@ -1122,7 +1122,9 @@ export default function Home() {
       setLauncherEnabled(settings.launcherEnabled);
       setTermsOfUseUrl(settings.termsOfUseUrl);
       setPrivacyPolicyUrl(settings.privacyPolicyUrl);
-      setLauncherEntered(!settings.launcherEnabled);
+      if (!settings.launcherEnabled) {
+        setLauncherEntered(true);
+      }
     };
 
     void loadPublicAppSettings();
@@ -1174,6 +1176,7 @@ export default function Home() {
     }
 
     setLauncherStartingDomainId(domainId);
+    setLauncherEntered(true);
 
     try {
       await updateConfigBatch(
@@ -1186,9 +1189,11 @@ export default function Home() {
       }
 
       setSelectedDomainId(domainId);
-      setLauncherEntered(true);
+      // Release launcher waiting state after config sync succeeds.
+      setLauncherStartingDomainId(null);
     } catch (error) {
       setLauncherStartingDomainId(null);
+      setLauncherEntered(false);
       throw error;
     }
   };
@@ -2475,7 +2480,7 @@ export default function Home() {
                               </span>
                             </div>
                           ) : null}
-                          {model.copyright ? (
+                          {'copyright' in model && model.copyright ? (
                             <div className="mt-2 text-sm leading-6 text-slate-300">{model.copyright}</div>
                           ) : null}
                           <div className="mt-2 text-sm leading-6 text-slate-300">{model.description}</div>
