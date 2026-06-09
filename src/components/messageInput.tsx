@@ -1754,6 +1754,16 @@ export default function MessageInput({
     setUserMessage("");
   }
 
+  function clickedPresentationSpeakButton() {
+    const text = window.prompt("Amicaに読み上げさせるテキストを入力してください");
+    const trimmedText = text?.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    bot.speakPresentationText(trimmedText, selectedDomain);
+  }
+
   return (
     <div className={clsx("fixed bottom-2 w-full", domainAccessDialogDomain ? "z-[130]" : "z-20")}>
       <div className="mx-auto max-w-4xl rounded-lg border border-slate-700/60 bg-slate-900/80 p-2 shadow-lg backdrop-blur-md">
@@ -1777,8 +1787,8 @@ export default function MessageInput({
           className={clsx(
             "grid grid-flow-col gap-[8px]",
             selectedDomainGazeEnabled
-              ? "grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content]"
-              : "grid-cols-[min-content_min-content_min-content_1fr_min-content]"
+              ? "grid-cols-[min-content_min-content_min-content_min-content_min-content_1fr_min-content]"
+              : "grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content]"
           )}
         >
           {selectedDomainGazeEnabled && (
@@ -1902,6 +1912,19 @@ export default function MessageInput({
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="flex flex-col justify-center items-center">
+            <button
+              type="button"
+              className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center text-base leading-none disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={clickedPresentationSpeakButton}
+              disabled={isChatProcessing}
+              title="入力したテキストをAmicaに発話させる"
+              aria-label="プレゼン発話"
+            >
+              💬
+            </button>
           </div>
 
           <div className="flex w-full flex-col gap-1">
