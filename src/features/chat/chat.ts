@@ -1052,6 +1052,18 @@ export class Chat {
       console.debug('[CHRONICLE] metadata unavailable (intercept fallback or empty response)');
     }
 
+    const guideAction = injected.metadata?.guideAction;
+    if (guideAction?.type === 'start' && guideAction.guide) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('amica:guide-start', {
+          detail: guideAction,
+        }));
+      }
+      this.bubbleMessage("assistant", `ガイド「${guideAction.guide.title}」を開始します。`);
+      this.setChatProcessing?.(false);
+      return;
+    }
+
     const chronicleRequested = Boolean(hasChronicleMarker || injected.metadata?.chronicleTriggered);
     if (chronicleRequested) {
       const chronicleContent = typeof injected.chronicle?.content === 'string'

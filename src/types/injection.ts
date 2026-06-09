@@ -122,6 +122,31 @@ export interface InjectionInterceptResponse {
     /** MCP実行時のエラーコード */
     mcpErrorCode?: string;
 
+    guideAction?: {
+      type: 'start';
+      domainId: string;
+      guideId: string;
+      guide: {
+        deck_id: string;
+        version: string;
+        title: string;
+        description: string;
+        tags: string[];
+        slides: Array<{
+          slide_no: number;
+          type: 'web' | 'image' | 'qa';
+          url?: string;
+          title?: string;
+          display_seconds?: number;
+          notes: string;
+        }>;
+        qa_context?: {
+          enabled: boolean;
+          source: string;
+        };
+      };
+    };
+
     /** サーバー側で解決されたアタッチ済みPack */
     attachedPackIds?: string[];
 

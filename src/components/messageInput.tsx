@@ -110,6 +110,13 @@ type PresentationDeck = {
   };
 };
 
+type GuideStartEventDetail = {
+  type: 'start';
+  domainId: string;
+  guideId: string;
+  guide: PresentationDeck;
+};
+
 const DEFAULT_PRESENTATION_SLIDE_SECONDS = 10;
 
 function getPresentationSlideSeconds(slide: PresentationSlide | null): number {
@@ -529,6 +536,22 @@ export default function MessageInput({
     presentationModalOpen,
     presentationSlideIndex,
   ]);
+
+  useEffect(() => {
+    const handleGuideStart = (event: Event) => {
+      const detail = (event as CustomEvent<GuideStartEventDetail>).detail;
+      if (detail?.type !== 'start' || !detail.guide || !Array.isArray(detail.guide.slides)) {
+        return;
+      }
+
+      startPresentationDeck(detail.guide);
+    };
+
+    window.addEventListener('amica:guide-start', handleGuideStart);
+    return () => {
+      window.removeEventListener('amica:guide-start', handleGuideStart);
+    };
+  }, [attachedImage, presentationImageDataUrl]);
 
   useEffect(() => {
     onDomainAccessDialogOpenChange?.(Boolean(domainAccessDialogDomain));
@@ -1313,8 +1336,7 @@ export default function MessageInput({
     reader.readAsDataURL(file);
   }
 
-  function openPresentationModal() {
-    const deck = SAMPLE_PRESENTATION_DECK;
+  function startPresentationDeck(deck: PresentationDeck) {
     const firstSlide = deck.slides[0];
     setPresentationDeck(deck);
     setPresentationSlideIndex(0);
@@ -1330,6 +1352,10 @@ export default function MessageInput({
     setPresentationModalOpen(true);
     setFeatureMenuOpen(false);
     setDomainMenuOpen(false);
+  }
+
+  function openPresentationModal() {
+    startPresentationDeck(SAMPLE_PRESENTATION_DECK);
   }
 
   function openPresentationSlidePicker() {
