@@ -88,6 +88,73 @@ const ttsBackendLabels: Record<string, string> = {
   stylebertvits2: 'Style-Bert-VITS2',
 };
 
+type PresentationSlide = {
+  slide_no: number;
+  type: 'web' | 'image' | 'qa';
+  url?: string;
+  title?: string;
+  display_seconds?: number;
+  notes: string;
+};
+
+type PresentationDeck = {
+  deck_id: string;
+  version: string;
+  title: string;
+  description: string;
+  tags: string[];
+  slides: PresentationSlide[];
+  qa_context?: {
+    enabled: boolean;
+    source: string;
+  };
+};
+
+const DEFAULT_PRESENTATION_SLIDE_SECONDS = 10;
+
+function getPresentationSlideSeconds(slide: PresentationSlide | null): number {
+  const seconds = slide?.display_seconds;
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? seconds
+    : DEFAULT_PRESENTATION_SLIDE_SECONDS;
+}
+
+// まずは固定サンプルを読み込み、後で外部JSON読み込みに差し替えやすい形にしておく。
+const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
+  deck_id: "ark_i_web_demo",
+  version: "0.1.0",
+  title: "Ark-i Webデモ",
+  description: "Webページを表示しながらArk-iが説明する3ページ構成のデモ",
+  tags: ["Ark-i", "Webデモ", "展示会", "説明会"],
+  slides: [
+    {
+      slide_no: 1,
+      type: "web",
+      url: "https://ark-i.nftdrive.net",
+      display_seconds: 20,
+      notes: "こちらがArk-iのランディングページです。Ark-iは、現場ごとのドメインに応じてAIコンシェルジュを切り替えられる仕組みです。",
+    },
+    {
+      slide_no: 2,
+      type: "image",
+      url: "https://ark-i.nftdrive.net/img/screenshot1.png",
+      display_seconds: 20,
+      notes: "この図はArk-iの基本構成です。Amicaがユーザーインターフェースを担当し、BEYOND-CoreがMCPや外部サービスとの接続を担当します。",
+    },
+    {
+      slide_no: 3,
+      type: "qa",
+      title: "質疑応答",
+      display_seconds: 20,
+      notes: "以上で説明は終了です。ここからは、Ark-iについてご質問ください。",
+    },
+  ],
+  qa_context: {
+    enabled: true,
+    source: "slides_and_notes",
+  },
+};
+
 const chatbotBackendLabels: Record<string, string> = {
   echo: 'Echo',
   arbius_llm: 'Arbius',
@@ -205,6 +272,10 @@ export default function MessageInput({
   const [presentationImageDataUrl, setPresentationImageDataUrl] = useState('');
   const [presentationImageName, setPresentationImageName] = useState('');
   const [presentationText, setPresentationText] = useState('');
+  const [presentationDeck, setPresentationDeck] = useState<PresentationDeck | null>(null);
+  const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
+  const [presentationAutoPlay, setPresentationAutoPlay] = useState(false);
+  const lastSpokenPresentationSlideRef = useRef('');
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
@@ -381,6 +452,9 @@ export default function MessageInput({
       : DEFAULT_GAZE_GREETINGS;
   const selectedDomainHasChronicle = Boolean(selectedDomainOption?.chronicleAttached);
   const [chronicleEnabledForInput, setChronicleEnabledForInput] = useState(false);
+  const currentPresentationSlide = presentationDeck?.slides[presentationSlideIndex] || null;
+  const presentationSlideCount = presentationDeck?.slides.length || 0;
+  const currentPresentationSlideSeconds = getPresentationSlideSeconds(currentPresentationSlide);
 
   useEffect(() => {
     if (!selectedDomainHasChronicle) {
@@ -399,6 +473,7 @@ export default function MessageInput({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        setPresentationAutoPlay(false);
         setPresentationModalOpen(false);
       }
     };
@@ -409,6 +484,51 @@ export default function MessageInput({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [presentationModalOpen]);
+
+  useEffect(() => {
+    if (!presentationModalOpen || !presentationDeck || !currentPresentationSlide) {
+      return;
+    }
+
+    const slideKey = `${presentationDeck.deck_id}:${presentationSlideIndex}:${currentPresentationSlide.slide_no}`;
+    if (lastSpokenPresentationSlideRef.current === slideKey) {
+      return;
+    }
+
+    lastSpokenPresentationSlideRef.current = slideKey;
+    const notes = currentPresentationSlide.notes.trim();
+    if (notes) {
+      bot.speakPresentationText(notes, selectedDomain);
+    }
+  }, [currentPresentationSlide, presentationDeck, presentationModalOpen, presentationSlideIndex, selectedDomain]);
+
+  useEffect(() => {
+    if (!presentationModalOpen || !presentationAutoPlay || !presentationDeck || !currentPresentationSlide) {
+      return;
+    }
+
+    if (presentationSlideIndex >= presentationDeck.slides.length - 1) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const nextIndex = presentationSlideIndex + 1;
+      const nextSlide = presentationDeck.slides[nextIndex];
+      setPresentationSlideIndex(nextIndex);
+      setPresentationText(nextSlide?.notes || '');
+    }, currentPresentationSlideSeconds * 1000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    currentPresentationSlide,
+    currentPresentationSlideSeconds,
+    presentationAutoPlay,
+    presentationDeck,
+    presentationModalOpen,
+    presentationSlideIndex,
+  ]);
 
   useEffect(() => {
     onDomainAccessDialogOpenChange?.(Boolean(domainAccessDialogDomain));
@@ -1194,6 +1314,15 @@ export default function MessageInput({
   }
 
   function openPresentationModal() {
+    const deck = SAMPLE_PRESENTATION_DECK;
+    const firstSlide = deck.slides[0];
+    setPresentationDeck(deck);
+    setPresentationSlideIndex(0);
+    setPresentationText(firstSlide?.notes || '');
+    setPresentationImageDataUrl('');
+    setPresentationImageName('');
+    setPresentationAutoPlay(true);
+    lastSpokenPresentationSlideRef.current = '';
     if (attachedImage && !presentationImageDataUrl) {
       setPresentationImageDataUrl(attachedImage.dataUrl);
       setPresentationImageName(attachedImage.fileName || attachedImage.mimeType || 'attached image');
@@ -1224,6 +1353,17 @@ export default function MessageInput({
       setPresentationImageName(file.name || file.type || 'slide image');
     };
     reader.readAsDataURL(file);
+  }
+
+  function showPresentationSlide(nextIndex: number) {
+    if (!presentationDeck || presentationDeck.slides.length === 0) {
+      return;
+    }
+
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), presentationDeck.slides.length - 1);
+    const slide = presentationDeck.slides[boundedIndex];
+    setPresentationSlideIndex(boundedIndex);
+    setPresentationText(slide.notes || '');
   }
 
   function speakPresentationTextFromModal() {
@@ -2128,50 +2268,136 @@ export default function MessageInput({
           aria-modal="true"
           aria-label="プレゼンテーションスライド"
         >
-          <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-2xl backdrop-blur-md">
-            <button
-              type="button"
-              className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-              onClick={openPresentationSlidePicker}
-            >
-              画像を選択
-            </button>
+          <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100vw-8rem)] flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-2xl backdrop-blur-md">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-white">
+                {presentationDeck?.title || 'Presentation'}
+              </div>
+              <div className="truncate text-xs text-slate-400">
+                {currentPresentationSlide
+                  ? `${currentPresentationSlide.slide_no} / ${presentationSlideCount} ・ ${currentPresentationSlide.type}`
+                  : 'No slide'}
+              </div>
+            </div>
+            {currentPresentationSlide?.type === 'image' ? (
+              <button
+                type="button"
+                className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+                onClick={openPresentationSlidePicker}
+              >
+                画像差し替え
+              </button>
+            ) : null}
+            {currentPresentationSlide?.type === 'web' && currentPresentationSlide.url ? (
+              <a
+                href={currentPresentationSlide.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                外部で開く
+              </a>
+            ) : null}
             {presentationImageName ? (
               <span className="max-w-[min(52vw,520px)] truncate text-xs text-slate-300">
                 {presentationImageName}
               </span>
-            ) : (
-              <span className="text-xs text-slate-400">スライド画像は未選択です</span>
-            )}
+            ) : null}
           </div>
 
           <button
             type="button"
             className="absolute right-4 top-4 z-10 rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
-            onClick={() => setPresentationModalOpen(false)}
+            onClick={() => {
+              setPresentationAutoPlay(false);
+              setPresentationModalOpen(false);
+            }}
             aria-label="スライドモーダルを閉じる"
           >
             閉じる
           </button>
 
           <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-20">
-            {presentationImageDataUrl ? (
+            {currentPresentationSlide?.type === 'web' && currentPresentationSlide.url ? (
+              <div className="relative h-full w-full">
+                <iframe
+                  src={currentPresentationSlide.url}
+                  title={currentPresentationSlide.title || presentationDeck?.title || 'web slide'}
+                  className="h-full w-full rounded-2xl border border-white/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                />
+                <div className="pointer-events-none absolute bottom-4 left-1/2 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full bg-slate-950/72 px-4 py-2 text-xs text-slate-200 shadow-xl backdrop-blur-md">
+                  サイト側の制限で表示されない場合は、左上の「外部で開く」を使ってください。
+                </div>
+              </div>
+            ) : currentPresentationSlide?.type === 'image' && (presentationImageDataUrl || currentPresentationSlide.url) ? (
               <img
-                src={presentationImageDataUrl}
-                alt={presentationImageName || 'presentation slide'}
+                src={presentationImageDataUrl || currentPresentationSlide.url}
+                alt={presentationImageName || currentPresentationSlide.title || 'presentation slide'}
                 className="max-h-full max-w-full object-contain shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
               />
+            ) : currentPresentationSlide?.type === 'qa' ? (
+              <div className="flex h-full w-full max-w-5xl items-center justify-center rounded-3xl border border-cyan-300/20 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.22),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(8,47,73,0.88))] px-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+                <div>
+                  <div className="text-sm font-semibold uppercase tracking-[0.5em] text-cyan-200/80">Q&A</div>
+                  <h2 className="mt-5 text-5xl font-black tracking-tight text-white md:text-7xl">
+                    {currentPresentationSlide.title || '質疑応答'}
+                  </h2>
+                  <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-cyan-50/82">
+                    {currentPresentationSlide.notes}
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="flex h-full w-full max-w-5xl items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/[0.03] text-center">
                 <div>
-                  <div className="text-lg font-semibold text-white">スライド画像を選択してください</div>
-                  <div className="mt-2 text-sm text-slate-400">画面いっぱいに表示しながら、下のプロンプトで読み上げできます。</div>
+                  <div className="text-lg font-semibold text-white">表示できるスライドがありません</div>
+                  <div className="mt-2 text-sm text-slate-400">画像スライドの場合は画像を差し替えることもできます。</div>
                 </div>
               </div>
             )}
           </div>
 
           <div className="absolute inset-x-0 bottom-0 z-10 border-t border-white/10 bg-slate-950/82 px-4 py-3 backdrop-blur-md">
+            <div className="mx-auto mb-3 flex max-w-5xl flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/16 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => showPresentationSlide(presentationSlideIndex - 1)}
+                  disabled={presentationSlideIndex <= 0}
+                >
+                  前へ
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/16 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => showPresentationSlide(presentationSlideIndex + 1)}
+                  disabled={!presentationDeck || presentationSlideIndex >= presentationSlideCount - 1}
+                >
+                  次へ
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => setPresentationAutoPlay((value) => !value)}
+                  disabled={!presentationDeck || presentationSlideIndex >= presentationSlideCount - 1}
+                >
+                  {presentationAutoPlay ? '自動送り停止' : '自動送り再開'}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-100">
+                  表示時間: {currentPresentationSlideSeconds}秒
+                </div>
+                {presentationDeck?.qa_context?.enabled ? (
+                  <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
+                    QA context: {presentationDeck.qa_context.source}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end">
               <label className="min-w-0 flex-1 text-sm font-semibold text-slate-200">
                 読み上げプロンプト
