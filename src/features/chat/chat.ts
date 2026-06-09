@@ -730,6 +730,58 @@ export class Chat {
     });
   }
 
+  public speakPresentationText(text: string, domainId?: string): void {
+    const presentationText = (text || "").trim();
+    if (!presentationText) {
+      return;
+    }
+
+    const effectiveDomainId = (domainId || "").trim() || resolveActiveDomainId();
+
+    this.currentStreamIdx++;
+    this.ttsJobs.clear();
+    this.speakJobs.clear();
+    this.stopCurrentPlayback();
+
+    if (this.currentAssistantMessage !== "") {
+      this.messageList!.push({
+        role: "assistant",
+        content: this.currentAssistantMessage,
+        dbResult: this.currentAssistantDbResult,
+        mcpInfo: this.currentAssistantMcpInfo,
+        attachment: this.currentAssistantAttachment,
+        historyId: this.currentAssistantHistoryId,
+        domainId: this.currentAssistantDomainId,
+        createdAt: this.currentAssistantCreatedAt,
+      });
+    }
+
+    this.currentAssistantMessage = "";
+    this.currentAssistantDbResult = undefined;
+    this.currentAssistantMcpInfo = undefined;
+    this.currentAssistantAttachment = undefined;
+    this.currentAssistantHistoryId = undefined;
+    this.currentAssistantCreatedAt = undefined;
+    this.currentAssistantDomainId = effectiveDomainId;
+    this.pendingDbResult = undefined;
+    this.pendingMcpInfo = undefined;
+    this.setAssistantDbResult?.(undefined);
+
+    this.bubbleMessage("assistant", presentationText);
+
+    const screenplays = textsToScreenplay([presentationText]);
+    if (screenplays.length === 0) {
+      return;
+    }
+
+    this.ttsJobs.enqueue({
+      screenplay: screenplays[0],
+      streamIdx: this.currentStreamIdx,
+      domainId: effectiveDomainId,
+      bubbleToChat: false,
+    });
+  }
+
   public bubbleMessage(role: Role, text: string, attachment?: ChatImageAttachment) {
     // TODO: currentUser & Assistant message should be contain the message with emotion in it
 

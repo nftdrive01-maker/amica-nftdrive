@@ -199,6 +199,12 @@ export default function MessageInput({
   const [dismissedDomainAccessDomainId, setDismissedDomainAccessDomainId] = useState('');
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [attachedImage, setAttachedImage] = useState<ChatImageAttachment | null>(null);
+  const presentationSlideInputRef = useRef<HTMLInputElement>(null);
+  const presentationTextInputRef = useRef<HTMLTextAreaElement>(null);
+  const [presentationModalOpen, setPresentationModalOpen] = useState(false);
+  const [presentationImageDataUrl, setPresentationImageDataUrl] = useState('');
+  const [presentationImageName, setPresentationImageName] = useState('');
+  const [presentationText, setPresentationText] = useState('');
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
@@ -381,6 +387,28 @@ export default function MessageInput({
       setChronicleEnabledForInput(false);
     }
   }, [selectedDomainHasChronicle]);
+
+  useEffect(() => {
+    if (!presentationModalOpen) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      presentationTextInputRef.current?.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPresentationModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [presentationModalOpen]);
 
   useEffect(() => {
     onDomainAccessDialogOpenChange?.(Boolean(domainAccessDialogDomain));
@@ -1165,6 +1193,50 @@ export default function MessageInput({
     reader.readAsDataURL(file);
   }
 
+  function openPresentationModal() {
+    if (attachedImage && !presentationImageDataUrl) {
+      setPresentationImageDataUrl(attachedImage.dataUrl);
+      setPresentationImageName(attachedImage.fileName || attachedImage.mimeType || 'attached image');
+    }
+    setPresentationModalOpen(true);
+    setFeatureMenuOpen(false);
+    setDomainMenuOpen(false);
+  }
+
+  function openPresentationSlidePicker() {
+    presentationSlideInputRef.current?.click();
+  }
+
+  function handlePresentationSlideChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      if (!dataUrl) {
+        return;
+      }
+
+      setPresentationImageDataUrl(dataUrl);
+      setPresentationImageName(file.name || file.type || 'slide image');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function speakPresentationTextFromModal() {
+    const trimmedText = presentationText.trim();
+    if (!trimmedText) {
+      presentationTextInputRef.current?.focus();
+      return;
+    }
+
+    bot.speakPresentationText(trimmedText, selectedDomain);
+    setPresentationText('');
+  }
+
   function handlePasteIntoInput(event: React.ClipboardEvent<HTMLInputElement>) {
     const items = Array.from(event.clipboardData?.items || []);
     const imageItem = items.find((item) => item.type.startsWith('image/'));
@@ -1755,13 +1827,7 @@ export default function MessageInput({
   }
 
   function clickedPresentationSpeakButton() {
-    const text = window.prompt("Amicaに読み上げさせるテキストを入力してください");
-    const trimmedText = text?.trim();
-    if (!trimmedText) {
-      return;
-    }
-
-    bot.speakPresentationText(trimmedText, selectedDomain);
+    openPresentationModal();
   }
 
   return (
@@ -2045,7 +2111,108 @@ export default function MessageInput({
           className="hidden"
           onChange={handleAttachmentChange}
         />
+
+        <input
+          ref={presentationSlideInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePresentationSlideChange}
+        />
       </div>
+
+      {presentationModalOpen && (
+        <div
+          className="fixed inset-0 z-[140] flex flex-col bg-black/95 text-white"
+          role="dialog"
+          aria-modal="true"
+          aria-label="プレゼンテーションスライド"
+        >
+          <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-2xl backdrop-blur-md">
+            <button
+              type="button"
+              className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+              onClick={openPresentationSlidePicker}
+            >
+              画像を選択
+            </button>
+            {presentationImageName ? (
+              <span className="max-w-[min(52vw,520px)] truncate text-xs text-slate-300">
+                {presentationImageName}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400">スライド画像は未選択です</span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+            onClick={() => setPresentationModalOpen(false)}
+            aria-label="スライドモーダルを閉じる"
+          >
+            閉じる
+          </button>
+
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-20">
+            {presentationImageDataUrl ? (
+              <img
+                src={presentationImageDataUrl}
+                alt={presentationImageName || 'presentation slide'}
+                className="max-h-full max-w-full object-contain shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+              />
+            ) : (
+              <div className="flex h-full w-full max-w-5xl items-center justify-center rounded-3xl border border-dashed border-white/20 bg-white/[0.03] text-center">
+                <div>
+                  <div className="text-lg font-semibold text-white">スライド画像を選択してください</div>
+                  <div className="mt-2 text-sm text-slate-400">画面いっぱいに表示しながら、下のプロンプトで読み上げできます。</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 z-10 border-t border-white/10 bg-slate-950/82 px-4 py-3 backdrop-blur-md">
+            <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="min-w-0 flex-1 text-sm font-semibold text-slate-200">
+                読み上げプロンプト
+                <textarea
+                  ref={presentationTextInputRef}
+                  value={presentationText}
+                  onChange={(event) => setPresentationText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                      event.preventDefault();
+                      speakPresentationTextFromModal();
+                    }
+                  }}
+                  placeholder="Amicaに読み上げさせるテキストを入力してください"
+                  className="mt-1 h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-sm font-normal text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20"
+                />
+              </label>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/16"
+                  onClick={() => setPresentationText('')}
+                >
+                  クリア
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/40 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={speakPresentationTextFromModal}
+                  disabled={!presentationText.trim()}
+                >
+                  発話
+                </button>
+              </div>
+            </div>
+            <div className="mx-auto mt-2 max-w-5xl text-xs text-slate-500">
+              Ctrl+Enter でも発話できます。発話中もスライドは表示されたままです。
+            </div>
+          </div>
+        </div>
+      )}
 
       {domainAccessDialogDomain && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950 px-4">
