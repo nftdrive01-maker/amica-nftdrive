@@ -67,12 +67,57 @@ function generateHistoryId() {
   return `hist_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function splitTextForTts(text: string, maxLength = 80): string[] {
+  const normalized = text.replace(/\r/g, "").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const chunks: string[] = [];
+  let current = "";
+
+  // SBV2は長いGETクエリや長すぎる1文で422になりやすいため、句点だけでなく読点や番号でも短く区切る。
+  const parts = normalized
+    .replace(/([。！？!?、，,；;])\s*/g, "$1\n")
+    .replace(/([^\n])([0-9０-９]+[.．、])/g, "$1\n$2")
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  for (const part of parts.length > 0 ? parts : [normalized]) {
+    const next = current ? `${current} ${part}` : part;
+    if (next.length <= maxLength) {
+      current = current ? `${current} ${part}` : part;
+      continue;
+    }
+
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+
+    for (let start = 0; start < part.length; start += maxLength) {
+      const sliced = part.slice(start, start + maxLength).trim();
+      if (sliced) {
+        chunks.push(sliced);
+      }
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
 type Speak = {
   audioBuffer: ArrayBuffer | null;
   screenplay: Screenplay;
   streamIdx: number;
   domainId?: string;
   bubbleToChat?: boolean;
+  onDone?: () => void;
 };
 
 type TTSJob = {
@@ -80,6 +125,7 @@ type TTSJob = {
   streamIdx: number;
   domainId?: string;
   bubbleToChat?: boolean;
+  onDone?: () => void;
 };
 
 const AMICA_LIFE_JAPANESE_RULE = [
@@ -551,17 +597,25 @@ export class Chat {
 
         if (ttsJob.streamIdx !== this.currentStreamIdx) {
           console.log("skipping tts for streamIdx");
+          ttsJob.onDone?.();
           continue;
         }
 
-        const audioBuffer = await this.fetchAudio(ttsJob.screenplay.talk, ttsJob.domainId);
-        this.speakJobs.enqueue({
-          audioBuffer,
-          screenplay: ttsJob.screenplay,
-          streamIdx: ttsJob.streamIdx,
-          domainId: ttsJob.domainId,
-          bubbleToChat: ttsJob.bubbleToChat,
-        });
+        try {
+          const audioBuffer = await this.fetchAudio(ttsJob.screenplay.talk, ttsJob.domainId);
+          this.speakJobs.enqueue({
+            audioBuffer,
+            screenplay: ttsJob.screenplay,
+            streamIdx: ttsJob.streamIdx,
+            domainId: ttsJob.domainId,
+            bubbleToChat: ttsJob.bubbleToChat,
+            onDone: ttsJob.onDone,
+          });
+        } catch (error) {
+          // TTS生成が失敗してもキュー処理全体は止めず、次の読み上げへ進める。
+          console.error("tts job failed", error);
+          ttsJob.onDone?.();
+        }
       } while (this.ttsJobs.size() > 0);
       await wait(50);
     }
@@ -576,6 +630,7 @@ export class Chat {
         }
         if (speak.streamIdx !== this.currentStreamIdx) {
           console.log("skipping speak for streamIdx");
+          speak.onDone?.();
           continue;
         }
 
@@ -603,6 +658,7 @@ export class Chat {
           this.speakingNow = false;
           this.setChatSpeaking!(false);
           this.isAwake() ? this.updateAwake() : null;
+          speak.onDone?.();
           continue;
         }
 
@@ -613,48 +669,54 @@ export class Chat {
             streamIdx: speak.streamIdx,
             text: speak.screenplay.text,
           });
-          if (this.viewer?.model) {
-            await this.viewer.model.speak(speak.audioBuffer, speak.screenplay);
-          } else {
-            // VRM非表示時：AudioContextで直接音声再生し、終了まで待機
-            await new Promise<void>((resolve) => {
-              try {
-                const audioCtx = new AudioContext();
-                audioCtx.decodeAudioData(speak.audioBuffer!.slice(0), (decoded) => {
-                  const source = audioCtx.createBufferSource();
-                  source.buffer = decoded;
-                  source.connect(audioCtx.destination);
-                  this.currentPlaybackAudioContext = audioCtx;
-                  this.currentPlaybackSource = source;
-                  this.currentPlaybackResolve = resolve;
-                  source.start();
-                  source.addEventListener("ended", () => {
-                    if (this.currentPlaybackSource === source) {
-                      this.currentPlaybackSource = null;
-                    }
-                    if (this.currentPlaybackAudioContext === audioCtx) {
-                      this.currentPlaybackAudioContext = null;
-                    }
-                    if (this.currentPlaybackResolve === resolve) {
-                      this.currentPlaybackResolve = null;
-                    }
-                    void audioCtx.close();
-                    resolve();
-                  }, { once: true });
-                }, () => resolve());
-              } catch {
-                resolve();
-              }
+          try {
+            if (this.viewer?.model) {
+              await this.viewer.model.speak(speak.audioBuffer, speak.screenplay);
+            } else {
+              // VRM非表示時：AudioContextで直接音声再生し、終了まで待機
+              await new Promise<void>((resolve) => {
+                try {
+                  const audioCtx = new AudioContext();
+                  audioCtx.decodeAudioData(speak.audioBuffer!.slice(0), (decoded) => {
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = decoded;
+                    source.connect(audioCtx.destination);
+                    this.currentPlaybackAudioContext = audioCtx;
+                    this.currentPlaybackSource = source;
+                    this.currentPlaybackResolve = resolve;
+                    source.start();
+                    source.addEventListener("ended", () => {
+                      if (this.currentPlaybackSource === source) {
+                        this.currentPlaybackSource = null;
+                      }
+                      if (this.currentPlaybackAudioContext === audioCtx) {
+                        this.currentPlaybackAudioContext = null;
+                      }
+                      if (this.currentPlaybackResolve === resolve) {
+                        this.currentPlaybackResolve = null;
+                      }
+                      void audioCtx.close();
+                      resolve();
+                    }, { once: true });
+                  }, () => resolve());
+                } catch {
+                  resolve();
+                }
+              });
+            }
+          } catch (error) {
+            console.error("speak playback failed", error);
+          } finally {
+            console.debug("speak end", {
+              streamIdx: speak.streamIdx,
+              text: speak.screenplay.text,
             });
+            this.speakingNow = false;
+            this.setChatSpeaking!(false);
+            this.isAwake() ? this.updateAwake() : null;
           }
-          console.debug("speak end", {
-            streamIdx: speak.streamIdx,
-            text: speak.screenplay.text,
-          });
-          this.speakingNow = false;
-          this.setChatSpeaking!(false);
-          this.isAwake() ? this.updateAwake() : null;
         }
+        speak.onDone?.();
       } while (this.speakJobs.size() > 0);
       await wait(50);
     }
@@ -707,26 +769,31 @@ export class Chat {
     resolve?.();
   }
 
-  public speakAssistantReaction(text: string, domainId?: string): void {
+  public speakAssistantReaction(text: string, domainId?: string): Promise<void> {
     const reaction = (text || '').trim();
     if (!reaction) {
-      return;
+      return Promise.resolve();
     }
 
     const effectiveDomainId = (domainId || '').trim() || resolveActiveDomainId();
 
     this.bubbleMessage('assistant', reaction);
 
-    const screenplays = textsToScreenplay([reaction]);
+    const screenplays = textsToScreenplay(splitTextForTts(reaction));
     if (screenplays.length === 0) {
-      return;
+      return Promise.resolve();
     }
 
-    this.ttsJobs.enqueue({
-      screenplay: screenplays[0],
-      streamIdx: this.currentStreamIdx,
-      domainId: effectiveDomainId,
-      bubbleToChat: false,
+    return new Promise<void>((resolve) => {
+      screenplays.forEach((screenplay, index) => {
+        this.ttsJobs.enqueue({
+          screenplay,
+          streamIdx: this.currentStreamIdx,
+          domainId: effectiveDomainId,
+          bubbleToChat: false,
+          onDone: index === screenplays.length - 1 ? resolve : undefined,
+        });
+      });
     });
   }
 
@@ -769,16 +836,18 @@ export class Chat {
 
     this.bubbleMessage("assistant", presentationText);
 
-    const screenplays = textsToScreenplay([presentationText]);
+    const screenplays = textsToScreenplay(splitTextForTts(presentationText));
     if (screenplays.length === 0) {
       return;
     }
 
-    this.ttsJobs.enqueue({
-      screenplay: screenplays[0],
-      streamIdx: this.currentStreamIdx,
-      domainId: effectiveDomainId,
-      bubbleToChat: false,
+    screenplays.forEach((screenplay) => {
+      this.ttsJobs.enqueue({
+        screenplay,
+        streamIdx: this.currentStreamIdx,
+        domainId: effectiveDomainId,
+        bubbleToChat: false,
+      });
     });
   }
 

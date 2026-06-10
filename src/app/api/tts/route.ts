@@ -65,8 +65,23 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        console.error(`Style-Bert-VITS2 Error from ${baseUrl}: ${res.status} ${res.statusText}`);
-        return new Response(`Style-Bert-VITS2 proxy error: ${res.statusText}`, { status: res.status });
+        const upstreamText = await res.text().catch(() => '');
+        console.error(`Style-Bert-VITS2 Error from ${baseUrl}: ${res.status} ${res.statusText}`, {
+          textLength: String(text || '').length,
+          textPreview: String(text || '').slice(0, 120),
+          upstreamText,
+        });
+        return new Response(
+          JSON.stringify({
+            error: `Style-Bert-VITS2 proxy error: ${res.statusText}`,
+            status: res.status,
+            detail: upstreamText,
+          }),
+          {
+            status: res.status,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
       } catch (error) {
         lastError = error;
       }

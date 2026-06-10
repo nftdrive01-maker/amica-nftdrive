@@ -128,16 +128,6 @@ type GuideStartEventDetail = {
 };
 
 const DEFAULT_PRESENTATION_SLIDE_SECONDS = 10;
-const GUIDE_START_ANNOUNCEMENT_MIN_DELAY_MS = 2400;
-const GUIDE_START_ANNOUNCEMENT_MAX_DELAY_MS = 5200;
-
-function getGuideStartDelayMs(text: string): number {
-  const estimatedMs = text.length * 140;
-  return Math.min(
-    GUIDE_START_ANNOUNCEMENT_MAX_DELAY_MS,
-    Math.max(GUIDE_START_ANNOUNCEMENT_MIN_DELAY_MS, estimatedMs),
-  );
-}
 
 function getPresentationSlideSeconds(slide: PresentationSlide | null): number {
   const seconds = slide?.display_seconds;
@@ -367,9 +357,12 @@ export default function MessageInput({
   const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
   const [presentationAutoPlay, setPresentationAutoPlay] = useState(false);
   const [presentationGuideQaMode, setPresentationGuideQaMode] = useState(false);
+  const [presentationChromeVisible, setPresentationChromeVisible] = useState(true);
   const lastSpokenPresentationSlideRef = useRef('');
   const handledPresentationEndRef = useRef('');
   const pendingGuideStartTimerRef = useRef<number | null>(null);
+  const pendingGuideStartSeqRef = useRef(0);
+  const presentationChromeTimerRef = useRef<number | null>(null);
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
@@ -549,12 +542,66 @@ export default function MessageInput({
   const currentPresentationSlide = presentationDeck?.slides[presentationSlideIndex] || null;
   const presentationSlideCount = presentationDeck?.slides.length || 0;
   const currentPresentationSlideSeconds = getPresentationSlideSeconds(currentPresentationSlide);
+  const presentationChromeActive = presentationGuideQaMode || presentationChromeVisible;
+
+  const resetPresentationChromeTimer = useCallback(() => {
+    if (presentationChromeTimerRef.current !== null) {
+      window.clearTimeout(presentationChromeTimerRef.current);
+      presentationChromeTimerRef.current = null;
+    }
+
+    setPresentationChromeVisible(true);
+    if (!presentationModalOpen || presentationGuideQaMode) {
+      return;
+    }
+
+    presentationChromeTimerRef.current = window.setTimeout(() => {
+      setPresentationChromeVisible(false);
+      presentationChromeTimerRef.current = null;
+    }, 3000);
+  }, [presentationGuideQaMode, presentationModalOpen]);
 
   useEffect(() => {
     if (!selectedDomainHasChronicle) {
       setChronicleEnabledForInput(false);
     }
   }, [selectedDomainHasChronicle]);
+
+  useEffect(() => {
+    if (!presentationModalOpen) {
+      if (presentationChromeTimerRef.current !== null) {
+        window.clearTimeout(presentationChromeTimerRef.current);
+        presentationChromeTimerRef.current = null;
+      }
+      setPresentationChromeVisible(true);
+      return;
+    }
+
+    resetPresentationChromeTimer();
+    return () => {
+      if (presentationChromeTimerRef.current !== null) {
+        window.clearTimeout(presentationChromeTimerRef.current);
+        presentationChromeTimerRef.current = null;
+      }
+    };
+  }, [presentationGuideQaMode, presentationModalOpen, presentationSlideIndex, resetPresentationChromeTimer]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const shouldHideExternalChrome = presentationModalOpen && !presentationChromeActive;
+    if (shouldHideExternalChrome) {
+      document.body.dataset.amicaPresentationChromeHidden = 'true';
+    } else {
+      delete document.body.dataset.amicaPresentationChromeHidden;
+    }
+
+    return () => {
+      delete document.body.dataset.amicaPresentationChromeHidden;
+    };
+  }, [presentationChromeActive, presentationModalOpen]);
 
   useEffect(() => {
     if (!presentationModalOpen) {
@@ -639,13 +686,27 @@ export default function MessageInput({
         pendingGuideStartTimerRef.current = null;
       }
 
+      const guideStartSeq = pendingGuideStartSeqRef.current + 1;
+      pendingGuideStartSeqRef.current = guideStartSeq;
       const announcementText = (detail.announcementText || `ガイド「${detail.guide.title}」を開始します。`).trim();
-      bot.speakAssistantReaction(announcementText, detail.domainId || selectedDomain);
+      bot.bubbleMessage('assistant', announcementText);
+      const fallbackDone = new Promise<void>((resolve) => {
+        pendingGuideStartTimerRef.current = window.setTimeout(() => {
+          pendingGuideStartTimerRef.current = null;
+          resolve();
+        }, 150);
+      });
 
-      pendingGuideStartTimerRef.current = window.setTimeout(() => {
+      void fallbackDone.then(() => {
+        if (pendingGuideStartSeqRef.current !== guideStartSeq) {
+          return;
+        }
+        if (pendingGuideStartTimerRef.current !== null) {
+          window.clearTimeout(pendingGuideStartTimerRef.current);
+        }
         pendingGuideStartTimerRef.current = null;
         startPresentationDeck(detail.guide);
-      }, getGuideStartDelayMs(announcementText));
+      });
     };
 
     window.addEventListener('amica:guide-start', handleGuideStart);
@@ -654,6 +715,7 @@ export default function MessageInput({
         window.clearTimeout(pendingGuideStartTimerRef.current);
         pendingGuideStartTimerRef.current = null;
       }
+      pendingGuideStartSeqRef.current++;
       window.removeEventListener('amica:guide-start', handleGuideStart);
     };
   }, [attachedImage, bot, presentationImageDataUrl, selectedDomain]);
@@ -2487,8 +2549,10 @@ export default function MessageInput({
           role="dialog"
           aria-modal="true"
           aria-label="プレゼンテーションスライド"
+          onMouseMove={resetPresentationChromeTimer}
+          onTouchStart={resetPresentationChromeTimer}
         >
-          <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100vw-8rem)] flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-2xl backdrop-blur-md">
+          <div className={`absolute left-4 top-4 z-10 flex max-w-[calc(100vw-8rem)] flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-2 shadow-2xl backdrop-blur-md transition-opacity duration-300 ${presentationChromeActive ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
             <div className="min-w-0">
               <div className="truncate text-sm font-bold text-white">
                 {presentationDeck?.title || 'Presentation'}
@@ -2527,7 +2591,7 @@ export default function MessageInput({
 
           <button
             type="button"
-            className="absolute right-4 top-4 z-10 rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+            className={`absolute right-4 top-4 z-10 rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white transition-opacity duration-300 hover:bg-white/20 ${presentationChromeActive ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
             onClick={() => {
               setPresentationAutoPlay(false);
               setPresentationGuideQaMode(false);
@@ -2538,7 +2602,7 @@ export default function MessageInput({
             閉じる
           </button>
 
-          <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-20">
+          <div className={`flex min-h-0 flex-1 items-center justify-center transition-[padding] duration-300 ${presentationChromeActive ? 'px-4 py-20' : 'px-0 py-0'}`}>
             {currentPresentationSlide?.type === 'web' && currentPresentationSlide.url ? (
               <div className="relative h-full w-full">
                 <iframe
@@ -2555,7 +2619,7 @@ export default function MessageInput({
               <img
                 src={presentationImageDataUrl || currentPresentationSlide.url}
                 alt={presentationImageName || currentPresentationSlide.title || 'presentation slide'}
-                className="max-h-full max-w-full object-contain shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+                className={`${presentationChromeActive ? 'max-h-full max-w-full shadow-[0_24px_80px_rgba(0,0,0,0.45)]' : 'h-full w-full shadow-none'} object-contain transition-all duration-300`}
               />
             ) : currentPresentationSlide?.type === 'qa' ? (
               <div className="flex h-full w-full max-w-5xl items-center justify-center rounded-3xl border border-cyan-300/20 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.22),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(8,47,73,0.88))] px-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
@@ -2579,7 +2643,7 @@ export default function MessageInput({
             )}
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 z-10 border-t border-white/10 bg-slate-950/82 px-4 py-3 backdrop-blur-md">
+          <div className={`absolute inset-x-0 bottom-0 z-10 border-t border-white/10 bg-slate-950/82 px-4 py-3 backdrop-blur-md transition-opacity duration-300 ${presentationChromeActive ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
             <div className="mx-auto mb-3 flex max-w-5xl flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button

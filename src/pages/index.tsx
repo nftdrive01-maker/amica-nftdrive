@@ -1750,7 +1750,7 @@ export default function Home() {
 
       <div
         className={clsx(
-          "fixed left-2 top-2 z-20 rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden",
+          "amica-presentation-external-chrome fixed left-2 top-2 z-20 rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden transition-opacity duration-300",
           isMobileViewport ? "max-w-[220px]" : "max-w-[320px]"
         )}
       >
@@ -1962,7 +1962,7 @@ export default function Home() {
       {/* main menu */}
       <div
         className={clsx(
-          "fixed right-2 top-2 z-20",
+          "amica-presentation-external-chrome fixed right-2 top-2 z-20 transition-opacity duration-300",
           domainAuthDialogOpen && "pointer-events-none opacity-0"
         )}
         ref={mainMenuRef}

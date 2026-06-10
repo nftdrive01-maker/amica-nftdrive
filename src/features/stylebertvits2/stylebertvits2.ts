@@ -11,10 +11,13 @@ async function buildStyleBertVits2Error(res: Response): Promise<Error> {
     const payloadMessage = typeof payload?.error === 'string' && payload.error.trim()
       ? payload.error.trim()
       : '';
+    const payloadDetail = typeof payload?.detail === 'string' && payload.detail.trim()
+      ? payload.detail.trim()
+      : '';
     const payloadRetryAfter = payload?.retryAfterSeconds;
 
     if (payloadMessage) {
-      message = payloadMessage;
+      message = payloadDetail ? `${payloadMessage}: ${payloadDetail}` : payloadMessage;
     }
 
     if (typeof payloadRetryAfter === 'number' && Number.isFinite(payloadRetryAfter) && payloadRetryAfter > 0) {

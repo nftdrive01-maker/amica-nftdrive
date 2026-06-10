@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+body[data-amica-presentation-chrome-hidden="true"] .amica-presentation-external-chrome {
+  opacity: 0;
+  pointer-events: none;
+}
+
 body {
   background-position: top center;
   background-attachment: fixed;
