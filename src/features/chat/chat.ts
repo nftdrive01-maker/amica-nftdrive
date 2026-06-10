@@ -1054,12 +1054,17 @@ export class Chat {
 
     const guideAction = injected.metadata?.guideAction;
     if (guideAction?.type === 'start' && guideAction.guide) {
+      const announcementText = `ガイド「${guideAction.guide.title}」を開始します。`;
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('amica:guide-start', {
-          detail: guideAction,
+          detail: {
+            ...guideAction,
+            announcementText,
+          },
         }));
+      } else {
+        this.bubbleMessage("assistant", announcementText);
       }
-      this.bubbleMessage("assistant", `ガイド「${guideAction.guide.title}」を開始します。`);
       this.setChatProcessing?.(false);
       return;
     }

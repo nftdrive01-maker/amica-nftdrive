@@ -126,6 +126,7 @@ export interface InjectionInterceptResponse {
       type: 'start';
       domainId: string;
       guideId: string;
+      announcementText?: string;
       guide: {
         deck_id: string;
         version: string;

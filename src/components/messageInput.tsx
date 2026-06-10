@@ -114,10 +114,21 @@ type GuideStartEventDetail = {
   type: 'start';
   domainId: string;
   guideId: string;
+  announcementText?: string;
   guide: PresentationDeck;
 };
 
 const DEFAULT_PRESENTATION_SLIDE_SECONDS = 10;
+const GUIDE_START_ANNOUNCEMENT_MIN_DELAY_MS = 2400;
+const GUIDE_START_ANNOUNCEMENT_MAX_DELAY_MS = 5200;
+
+function getGuideStartDelayMs(text: string): number {
+  const estimatedMs = text.length * 140;
+  return Math.min(
+    GUIDE_START_ANNOUNCEMENT_MAX_DELAY_MS,
+    Math.max(GUIDE_START_ANNOUNCEMENT_MIN_DELAY_MS, estimatedMs),
+  );
+}
 
 function getPresentationSlideSeconds(slide: PresentationSlide | null): number {
   const seconds = slide?.display_seconds;
@@ -283,6 +294,7 @@ export default function MessageInput({
   const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
   const [presentationAutoPlay, setPresentationAutoPlay] = useState(false);
   const lastSpokenPresentationSlideRef = useRef('');
+  const pendingGuideStartTimerRef = useRef<number | null>(null);
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
   const initialDomainConfigRef = useRef({
@@ -544,14 +556,29 @@ export default function MessageInput({
         return;
       }
 
-      startPresentationDeck(detail.guide);
+      if (pendingGuideStartTimerRef.current !== null) {
+        window.clearTimeout(pendingGuideStartTimerRef.current);
+        pendingGuideStartTimerRef.current = null;
+      }
+
+      const announcementText = (detail.announcementText || `ガイド「${detail.guide.title}」を開始します。`).trim();
+      bot.speakAssistantReaction(announcementText, detail.domainId || selectedDomain);
+
+      pendingGuideStartTimerRef.current = window.setTimeout(() => {
+        pendingGuideStartTimerRef.current = null;
+        startPresentationDeck(detail.guide);
+      }, getGuideStartDelayMs(announcementText));
     };
 
     window.addEventListener('amica:guide-start', handleGuideStart);
     return () => {
+      if (pendingGuideStartTimerRef.current !== null) {
+        window.clearTimeout(pendingGuideStartTimerRef.current);
+        pendingGuideStartTimerRef.current = null;
+      }
       window.removeEventListener('amica:guide-start', handleGuideStart);
     };
-  }, [attachedImage, presentationImageDataUrl]);
+  }, [attachedImage, bot, presentationImageDataUrl, selectedDomain]);
 
   useEffect(() => {
     onDomainAccessDialogOpenChange?.(Boolean(domainAccessDialogDomain));
