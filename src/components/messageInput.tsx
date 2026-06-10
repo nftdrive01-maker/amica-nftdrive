@@ -95,6 +95,10 @@ type PresentationSlide = {
   title?: string;
   display_seconds?: number;
   notes: string;
+  qa?: {
+    keywords: string[];
+    context: string;
+  };
 };
 
 type PresentationDeck = {
@@ -107,6 +111,11 @@ type PresentationDeck = {
   qa_context?: {
     enabled: boolean;
     source: string;
+  };
+  after_guide?: {
+    mode: 'end' | 'qa' | 'loop';
+    qa_behavior?: 'jump_to_related_slide';
+    fallback?: 'end';
   };
 };
 
@@ -137,6 +146,52 @@ function getPresentationSlideSeconds(slide: PresentationSlide | null): number {
     : DEFAULT_PRESENTATION_SLIDE_SECONDS;
 }
 
+function normalizeGuideQaText(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+function findRelatedGuideSlide(deck: PresentationDeck | null, query: string): { index: number; slide: PresentationSlide; score: number } | null {
+  const normalizedQuery = normalizeGuideQaText(query);
+  if (!deck || !normalizedQuery) {
+    return null;
+  }
+
+  const candidates = deck.slides
+    .map((slide, index) => {
+      const keywords = slide.qa?.keywords || [];
+      const searchableParts = [
+        slide.title || '',
+        slide.notes || '',
+        slide.qa?.context || '',
+        ...keywords,
+      ].map(normalizeGuideQaText);
+
+      const keywordScore = keywords.reduce((score, keyword) => {
+        const normalizedKeyword = normalizeGuideQaText(keyword);
+        return normalizedKeyword && normalizedQuery.includes(normalizedKeyword) ? score + 4 : score;
+      }, 0);
+      const textScore = searchableParts.reduce((score, part) => {
+        return part && normalizedQuery.includes(part) ? score + 1 : score;
+      }, 0);
+
+      return {
+        index,
+        slide,
+        score: keywordScore + textScore,
+      };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  return candidates[0] || null;
+}
+
+function toAudioBufferBackedFloat32Array(audio: Float32Array): Float32Array {
+  // VADなどの外部ライブラリ由来のTypedArrayはSharedArrayBufferを含む型として扱われることがある。
+  // Web Audio APIへ渡す前にコピーして、通常のArrayBuffer-backed Float32Arrayへ揃える。
+  return new Float32Array(audio);
+}
+
 // まずは固定サンプルを読み込み、後で外部JSON読み込みに差し替えやすい形にしておく。
 const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
   deck_id: "ark_i_web_demo",
@@ -151,6 +206,10 @@ const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
       url: "https://ark-i.nftdrive.net",
       display_seconds: 20,
       notes: "こちらがArk-iのランディングページです。Ark-iは、現場ごとのドメインに応じてAIコンシェルジュを切り替えられる仕組みです。",
+      qa: {
+        keywords: ["ランディングページ", "概要", "Ark-i"],
+        context: "Ark-iのランディングページと全体概要を説明するページです。",
+      },
     },
     {
       slide_no: 2,
@@ -158,6 +217,10 @@ const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
       url: "https://ark-i.nftdrive.net/img/screenshot1.png",
       display_seconds: 20,
       notes: "この図はArk-iの基本構成です。Amicaがユーザーインターフェースを担当し、BEYOND-CoreがMCPや外部サービスとの接続を担当します。",
+      qa: {
+        keywords: ["構成", "MCP", "BEYOND-Core", "Amica"],
+        context: "Ark-iはAmica、BEYOND-Core、MCP、LLMで構成されます。",
+      },
     },
     {
       slide_no: 3,
@@ -165,11 +228,20 @@ const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
       title: "質疑応答",
       display_seconds: 20,
       notes: "以上で説明は終了です。ここからは、Ark-iについてご質問ください。",
+      qa: {
+        keywords: ["質問", "質疑応答", "QA"],
+        context: "ガイド終了後の質疑応答ページです。",
+      },
     },
   ],
   qa_context: {
     enabled: true,
     source: "slides_and_notes",
+  },
+  after_guide: {
+    mode: "qa",
+    qa_behavior: "jump_to_related_slide",
+    fallback: "end",
   },
 };
 
@@ -293,7 +365,9 @@ export default function MessageInput({
   const [presentationDeck, setPresentationDeck] = useState<PresentationDeck | null>(null);
   const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
   const [presentationAutoPlay, setPresentationAutoPlay] = useState(false);
+  const [presentationGuideQaMode, setPresentationGuideQaMode] = useState(false);
   const lastSpokenPresentationSlideRef = useRef('');
+  const handledPresentationEndRef = useRef('');
   const pendingGuideStartTimerRef = useRef<number | null>(null);
   const gazeCalibrationRef = useRef<GazeCalibration | null>(null);
   const latestGazeMetricsRef = useRef<GazeMetrics | null>(null);
@@ -493,6 +567,7 @@ export default function MessageInput({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setPresentationAutoPlay(false);
+        setPresentationGuideQaMode(false);
         setPresentationModalOpen(false);
       }
     };
@@ -526,15 +601,17 @@ export default function MessageInput({
       return;
     }
 
-    if (presentationSlideIndex >= presentationDeck.slides.length - 1) {
-      return;
-    }
-
     const timer = window.setTimeout(() => {
-      const nextIndex = presentationSlideIndex + 1;
-      const nextSlide = presentationDeck.slides[nextIndex];
-      setPresentationSlideIndex(nextIndex);
-      setPresentationText(nextSlide?.notes || '');
+      if (presentationSlideIndex >= presentationDeck.slides.length - 1) {
+        const endKey = `${presentationDeck.deck_id}:${presentationSlideIndex}:${presentationDeck.after_guide?.mode || 'end'}`;
+        if (handledPresentationEndRef.current !== endKey) {
+          handledPresentationEndRef.current = endKey;
+          finishPresentationGuide();
+        }
+        return;
+      }
+
+      showPresentationSlide(presentationSlideIndex + 1);
     }, currentPresentationSlideSeconds * 1000);
 
     return () => {
@@ -1192,21 +1269,22 @@ export default function MessageInput({
       };
 
       try {
+        const audioForApi = toAudioBufferBackedFloat32Array(audio);
         switch (config("stt_backend")) {
           case 'whisper_browser': {
             console.debug('whisper_browser attempt');
             // since VAD sample rate is same as whisper we do nothing here
             // both are 16000
             const audioCtx = new AudioContext();
-            const buffer = audioCtx.createBuffer(1, audio.length, 16000);
-            buffer.copyToChannel(audio, 0, 0);
+            const buffer = audioCtx.createBuffer(1, audioForApi.length, 16000);
+            buffer.copyToChannel(audioForApi, 0, 0);
             transcriber.start(buffer);
             break;
           }
           case 'whisper_openai': {
             console.debug('whisper_openai attempt');
             const wav = new WaveFile();
-            wav.fromScratch(1, 16000, '32f', audio);
+            wav.fromScratch(1, 16000, '32f', audioForApi);
             const file = new File([wav.toBuffer()], "input.wav", { type: "audio/wav" });
 
             let prompt;
@@ -1226,7 +1304,7 @@ export default function MessageInput({
           case 'whispercpp': {
             console.debug('whispercpp attempt');
             const wav = new WaveFile();
-            wav.fromScratch(1, 16000, '32f', audio);
+            wav.fromScratch(1, 16000, '32f', audioForApi);
             wav.toBitDepth('16');
             const file = new File([wav.toBuffer()], "input.wav", { type: "audio/wav" });
 
@@ -1371,7 +1449,9 @@ export default function MessageInput({
     setPresentationImageDataUrl('');
     setPresentationImageName('');
     setPresentationAutoPlay(true);
+    setPresentationGuideQaMode(false);
     lastSpokenPresentationSlideRef.current = '';
+    handledPresentationEndRef.current = '';
     if (attachedImage && !presentationImageDataUrl) {
       setPresentationImageDataUrl(attachedImage.dataUrl);
       setPresentationImageName(attachedImage.fileName || attachedImage.mimeType || 'attached image');
@@ -1417,6 +1497,37 @@ export default function MessageInput({
     const slide = presentationDeck.slides[boundedIndex];
     setPresentationSlideIndex(boundedIndex);
     setPresentationText(slide.notes || '');
+  }
+
+  function finishPresentationGuide() {
+    if (!presentationDeck) {
+      return;
+    }
+
+    const afterMode = presentationDeck.after_guide?.mode || 'end';
+    if (afterMode === 'loop') {
+      setPresentationGuideQaMode(false);
+      handledPresentationEndRef.current = '';
+      showPresentationSlide(0);
+      setPresentationAutoPlay(true);
+      return;
+    }
+
+    if (afterMode === 'qa') {
+      const qaIndex = presentationDeck.slides.findIndex((slide) => slide.type === 'qa');
+      setPresentationAutoPlay(false);
+      setPresentationGuideQaMode(true);
+      if (qaIndex >= 0) {
+        showPresentationSlide(qaIndex);
+      }
+      bot.speakAssistantReaction('質疑応答モードに入りました。ガイドについて質問してください。', selectedDomain);
+      return;
+    }
+
+    setPresentationAutoPlay(false);
+    setPresentationGuideQaMode(false);
+    setPresentationModalOpen(false);
+    bot.speakAssistantReaction('ガイドを終了しました。通常チャットへ戻ります。', selectedDomain);
   }
 
   function speakPresentationTextFromModal() {
@@ -1996,6 +2107,37 @@ export default function MessageInput({
       return;
     }
 
+    if (presentationGuideQaMode && presentationDeck && trimmedMessage && !attachedImage) {
+      bot.bubbleMessage('user', trimmedMessage);
+      const match = findRelatedGuideSlide(presentationDeck, trimmedMessage);
+
+      if (match) {
+        const slideTitle = match.slide.title || `ページ ${match.slide.slide_no}`;
+        const guideJumpReason = `ユーザーが「${trimmedMessage}」について質問したため、関連する「${slideTitle}」へ切り替えます。`;
+        lastSpokenPresentationSlideRef.current = `${presentationDeck.deck_id}:${match.index}:${match.slide.slide_no}`;
+        showPresentationSlide(match.index);
+        setPresentationAutoPlay(false);
+        const answerText = [
+          guideJumpReason,
+          match.slide.qa?.context,
+          match.slide.notes,
+        ].filter(Boolean).join('\n');
+        bot.speakPresentationText(answerText, selectedDomain);
+      } else if (presentationDeck.after_guide?.fallback === 'end') {
+        setPresentationGuideQaMode(false);
+        setPresentationAutoPlay(false);
+        setPresentationModalOpen(false);
+        bot.speakAssistantReaction('関連するガイドページが見つからなかったため、通常チャットへ戻ります。', selectedDomain);
+        bot.receiveMessageFromUser(userMessage, false, selectedDomain);
+      }
+
+      if (!vad.listening && !hasOnScreenKeyboard()) {
+        inputRef.current?.focus();
+      }
+      setUserMessage('');
+      return;
+    }
+
     if (attachedImage) {
       const userBubbleText = trimmedMessage || "画像を添付しました";
       bot.setChatProcessing?.(true);
@@ -2363,6 +2505,7 @@ export default function MessageInput({
             className="absolute right-4 top-4 z-10 rounded-full bg-white/12 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
             onClick={() => {
               setPresentationAutoPlay(false);
+              setPresentationGuideQaMode(false);
               setPresentationModalOpen(false);
             }}
             aria-label="スライドモーダルを閉じる"
@@ -2434,7 +2577,7 @@ export default function MessageInput({
                   type="button"
                   className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={() => setPresentationAutoPlay((value) => !value)}
-                  disabled={!presentationDeck || presentationSlideIndex >= presentationSlideCount - 1}
+                  disabled={!presentationDeck || presentationGuideQaMode || presentationSlideIndex >= presentationSlideCount - 1}
                 >
                   {presentationAutoPlay ? '自動送り停止' : '自動送り再開'}
                 </button>
@@ -2446,6 +2589,11 @@ export default function MessageInput({
                 {presentationDeck?.qa_context?.enabled ? (
                   <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                     QA context: {presentationDeck.qa_context.source}
+                  </div>
+                ) : null}
+                {presentationGuideQaMode ? (
+                  <div className="rounded-full border border-amber-300/30 bg-amber-300/15 px-3 py-1 text-xs font-bold text-amber-100">
+                    質疑応答モード
                   </div>
                 ) : null}
               </div>

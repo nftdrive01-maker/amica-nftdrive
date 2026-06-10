@@ -10,8 +10,11 @@ export const useAudioPlayback = (audioContext: AudioContext) => {
         viewer: any
     ) => {
         const sampleRate = audioContext.sampleRate;
-        const newBuffer = audioContext.createBuffer(1, newAudioData.length, sampleRate);
-        newBuffer.copyToChannel(newAudioData, 0);
+        // External audio chunks may be typed as SharedArrayBuffer-backed.
+        // Web Audio expects an ArrayBuffer-backed Float32Array, so copy before scheduling.
+        const audioData = new Float32Array(newAudioData);
+        const newBuffer = audioContext.createBuffer(1, audioData.length, sampleRate);
+        newBuffer.copyToChannel(audioData, 0);
 
         const sourceNode = viewer.model?._lipSync?.audio.createBufferSource();
         sourceNode.buffer = newBuffer;

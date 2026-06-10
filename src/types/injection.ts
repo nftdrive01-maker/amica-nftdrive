@@ -140,10 +140,19 @@ export interface InjectionInterceptResponse {
           title?: string;
           display_seconds?: number;
           notes: string;
+          qa?: {
+            keywords: string[];
+            context: string;
+          };
         }>;
         qa_context?: {
           enabled: boolean;
           source: string;
+        };
+        after_guide?: {
+          mode: 'end' | 'qa' | 'loop';
+          qa_behavior?: 'jump_to_related_slide';
+          fallback?: 'end';
         };
       };
     };
