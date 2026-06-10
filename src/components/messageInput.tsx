@@ -362,6 +362,7 @@ export default function MessageInput({
   const [presentationImageDataUrl, setPresentationImageDataUrl] = useState('');
   const [presentationImageName, setPresentationImageName] = useState('');
   const [presentationText, setPresentationText] = useState('');
+  const [presentationQaQuestion, setPresentationQaQuestion] = useState('');
   const [presentationDeck, setPresentationDeck] = useState<PresentationDeck | null>(null);
   const [presentationSlideIndex, setPresentationSlideIndex] = useState(0);
   const [presentationAutoPlay, setPresentationAutoPlay] = useState(false);
@@ -1446,6 +1447,7 @@ export default function MessageInput({
     setPresentationDeck(deck);
     setPresentationSlideIndex(0);
     setPresentationText(firstSlide?.notes || '');
+    setPresentationQaQuestion('');
     setPresentationImageDataUrl('');
     setPresentationImageName('');
     setPresentationAutoPlay(true);
@@ -1517,6 +1519,7 @@ export default function MessageInput({
       const qaIndex = presentationDeck.slides.findIndex((slide) => slide.type === 'qa');
       setPresentationAutoPlay(false);
       setPresentationGuideQaMode(true);
+      setPresentationQaQuestion('');
       if (qaIndex >= 0) {
         showPresentationSlide(qaIndex);
       }
@@ -1539,6 +1542,50 @@ export default function MessageInput({
 
     bot.speakPresentationText(trimmedText, selectedDomain);
     setPresentationText('');
+  }
+
+  function submitGuideQaQuestion(question: string): boolean {
+    const trimmedQuestion = question.trim();
+    if (!presentationGuideQaMode || !presentationDeck || !trimmedQuestion) {
+      return false;
+    }
+
+    bot.bubbleMessage('user', trimmedQuestion);
+    const match = findRelatedGuideSlide(presentationDeck, trimmedQuestion);
+
+    if (match) {
+      const slideTitle = match.slide.title || `ページ ${match.slide.slide_no}`;
+      const guideJumpReason = `ユーザーが「${trimmedQuestion}」について質問したため、関連する「${slideTitle}」へ切り替えます。`;
+      lastSpokenPresentationSlideRef.current = `${presentationDeck.deck_id}:${match.index}:${match.slide.slide_no}`;
+      showPresentationSlide(match.index);
+      setPresentationAutoPlay(false);
+      const answerText = [
+        guideJumpReason,
+        match.slide.qa?.context,
+        match.slide.notes,
+      ].filter(Boolean).join('\n');
+      bot.speakPresentationText(answerText, selectedDomain);
+      setPresentationQaQuestion('');
+      return true;
+    }
+
+    if (presentationDeck.after_guide?.fallback === 'end') {
+      setPresentationGuideQaMode(false);
+      setPresentationAutoPlay(false);
+      setPresentationModalOpen(false);
+      setPresentationQaQuestion('');
+      bot.speakAssistantReaction('関連するガイドページが見つからなかったため、通常チャットへ戻ります。', selectedDomain);
+      bot.receiveMessageFromUser(trimmedQuestion, false, selectedDomain);
+      return true;
+    }
+
+    return false;
+  }
+
+  function submitGuideQaQuestionFromModal() {
+    if (!submitGuideQaQuestion(presentationQaQuestion)) {
+      presentationTextInputRef.current?.focus();
+    }
   }
 
   function handlePasteIntoInput(event: React.ClipboardEvent<HTMLInputElement>) {
@@ -2108,29 +2155,7 @@ export default function MessageInput({
     }
 
     if (presentationGuideQaMode && presentationDeck && trimmedMessage && !attachedImage) {
-      bot.bubbleMessage('user', trimmedMessage);
-      const match = findRelatedGuideSlide(presentationDeck, trimmedMessage);
-
-      if (match) {
-        const slideTitle = match.slide.title || `ページ ${match.slide.slide_no}`;
-        const guideJumpReason = `ユーザーが「${trimmedMessage}」について質問したため、関連する「${slideTitle}」へ切り替えます。`;
-        lastSpokenPresentationSlideRef.current = `${presentationDeck.deck_id}:${match.index}:${match.slide.slide_no}`;
-        showPresentationSlide(match.index);
-        setPresentationAutoPlay(false);
-        const answerText = [
-          guideJumpReason,
-          match.slide.qa?.context,
-          match.slide.notes,
-        ].filter(Boolean).join('\n');
-        bot.speakPresentationText(answerText, selectedDomain);
-      } else if (presentationDeck.after_guide?.fallback === 'end') {
-        setPresentationGuideQaMode(false);
-        setPresentationAutoPlay(false);
-        setPresentationModalOpen(false);
-        bot.speakAssistantReaction('関連するガイドページが見つからなかったため、通常チャットへ戻ります。', selectedDomain);
-        bot.receiveMessageFromUser(userMessage, false, selectedDomain);
-      }
-
+      submitGuideQaQuestion(trimmedMessage);
       if (!vad.listening && !hasOnScreenKeyboard()) {
         inputRef.current?.focus();
       }
@@ -2601,18 +2626,28 @@ export default function MessageInput({
 
             <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-end">
               <label className="min-w-0 flex-1 text-sm font-semibold text-slate-200">
-                読み上げプロンプト
+                {presentationGuideQaMode ? '質疑応答の質問入力' : '読み上げプロンプト'}
                 <textarea
                   ref={presentationTextInputRef}
-                  value={presentationText}
-                  onChange={(event) => setPresentationText(event.target.value)}
+                  value={presentationGuideQaMode ? presentationQaQuestion : presentationText}
+                  onChange={(event) => {
+                    if (presentationGuideQaMode) {
+                      setPresentationQaQuestion(event.target.value);
+                    } else {
+                      setPresentationText(event.target.value);
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
                       event.preventDefault();
-                      speakPresentationTextFromModal();
+                      if (presentationGuideQaMode) {
+                        submitGuideQaQuestionFromModal();
+                      } else {
+                        speakPresentationTextFromModal();
+                      }
                     }
                   }}
-                  placeholder="Amicaに読み上げさせるテキストを入力してください"
+                  placeholder={presentationGuideQaMode ? '例: MCPとBEYOND-Coreの関係を教えてください' : 'Amicaに読み上げさせるテキストを入力してください'}
                   className="mt-1 h-24 w-full resize-none rounded-xl border border-white/10 bg-slate-900/90 px-3 py-2 text-sm font-normal text-white outline-none placeholder:text-slate-500 focus:border-cyan-300/70 focus:ring-2 focus:ring-cyan-300/20"
                 />
               </label>
@@ -2620,22 +2655,30 @@ export default function MessageInput({
                 <button
                   type="button"
                   className="rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/16"
-                  onClick={() => setPresentationText('')}
+                  onClick={() => {
+                    if (presentationGuideQaMode) {
+                      setPresentationQaQuestion('');
+                    } else {
+                      setPresentationText('');
+                    }
+                  }}
                 >
                   クリア
                 </button>
                 <button
                   type="button"
                   className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/40 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={speakPresentationTextFromModal}
-                  disabled={!presentationText.trim()}
+                  onClick={presentationGuideQaMode ? submitGuideQaQuestionFromModal : speakPresentationTextFromModal}
+                  disabled={presentationGuideQaMode ? !presentationQaQuestion.trim() : !presentationText.trim()}
                 >
-                  発話
+                  {presentationGuideQaMode ? '質問する' : '発話'}
                 </button>
               </div>
             </div>
             <div className="mx-auto mt-2 max-w-5xl text-xs text-slate-500">
-              Ctrl+Enter でも発話できます。発話中もスライドは表示されたままです。
+              {presentationGuideQaMode
+                ? 'Ctrl+Enter でも質問できます。関連ページへ切り替えてから説明します。'
+                : 'Ctrl+Enter でも発話できます。発話中もスライドは表示されたままです。'}
             </div>
           </div>
         </div>
