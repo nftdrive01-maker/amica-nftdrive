@@ -11,6 +11,7 @@ import clsx from "clsx";
 
 const VRM_STATUS_EVENT = 'amica:vrm-status';
 const AVATAR_STATUS_EVENT = 'amica:avatar-status';
+const VRM_RELOAD_EVENT = 'amica:vrm-reload-request';
 
 function dispatchVrmStatus(state: 'idle' | 'loading' | 'ready' | 'error', url?: string) {
   if (typeof window === 'undefined') {
@@ -63,6 +64,7 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
   const [loadingError, setLoadingError] = useState(false);
   const [loadingErrorMessage, setLoadingErrorMessage] = useState("");
   const [configuredVrmUrl, setConfiguredVrmUrl] = useState(config("vrm_url").trim());
+  const [vrmReloadNonce, setVrmReloadNonce] = useState(0);
 
   // キャンバスが viewer にアタッチされたことを追跡するフラグ
   const [canvasReady, setCanvasReady] = useState(false);
@@ -111,6 +113,24 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
       window.removeEventListener(CONFIG_UPDATED_EVENT, handleConfigUpdated);
     };
   }, []);
+
+  useEffect(() => {
+    const handleVrmReloadRequested = () => {
+      loadRequestIdRef.current += 1;
+      viewer.resetVrmLoadQueue();
+      loadedUrlRef.current = null;
+      loadingUrlRef.current = null;
+      setConfiguredVrmUrl(config("vrm_url").trim());
+      setVrmEnabled(config("vrm_enabled") === 'true');
+      setIsVrmLocal("local" == config("vrm_save_type"));
+      setVrmReloadNonce((value) => value + 1);
+    };
+
+    window.addEventListener(VRM_RELOAD_EVENT, handleVrmReloadRequested);
+    return () => {
+      window.removeEventListener(VRM_RELOAD_EVENT, handleVrmReloadRequested);
+    };
+  }, [viewer]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // canvasRef: キャンバスを viewer に一度だけアタッチする。
@@ -213,6 +233,7 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
       loadingUrlRef.current = resolvedVrmUrl;
       loadedUrlRef.current = null;
       const requestId = ++loadRequestIdRef.current;
+      viewer.resetVrmLoadQueue();
 
       setIsLoading(true);
       setLoadingError(false);
@@ -256,7 +277,7 @@ export default function VrmViewer({ chatMode }: { chatMode: boolean }) {
     }
   // getCurrentVrm は ref 経由で参照するため deps に含めない
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasReady, vrmEnabled, configuredVrmUrl, isVrmLocal, isLoadingVrmList, viewer]);
+  }, [canvasReady, vrmEnabled, configuredVrmUrl, isVrmLocal, isLoadingVrmList, viewer, vrmReloadNonce]);
 
   return (
     <div

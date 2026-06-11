@@ -67,6 +67,7 @@ const DEFAULT_GAZE_GREETINGS = [
 ];
 
 const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
+const VRM_RELOAD_EVENT = 'amica:vrm-reload-request';
 
 const sttBackendLabels: Record<string, string> = {
   none: 'None',
@@ -1032,6 +1033,21 @@ export default function MessageInput({
 
     if (requestId !== domainApplyRequestIdRef.current) {
       return;
+    }
+
+    if (
+      typeof window !== 'undefined' &&
+      nextVrmEnabled &&
+      resolvedVrmUrl &&
+      (options?.forceReloadVrm || previousVrmUrl.trim() !== resolvedVrmUrl)
+    ) {
+      window.dispatchEvent(new CustomEvent(VRM_RELOAD_EVENT, {
+        detail: {
+          domainId: domain?.id,
+          url: resolvedVrmUrl,
+          force: options?.forceReloadVrm === true,
+        },
+      }));
     }
 
     if (typeof document !== 'undefined') {

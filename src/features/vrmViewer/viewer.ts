@@ -115,6 +115,7 @@ export class Viewer {
   public model?: Model;
   public room?: Room;
   private vrmLoadQueue: Promise<void> = Promise.resolve();
+  private vrmLoadGeneration: number = 0;
 
   public renderer?: THREE.WebGLRenderer;
   private clock: THREE.Clock;
@@ -718,7 +719,12 @@ export class Viewer {
     url: string,
     setLoadingProgress: (progress: string) => void,
   ) {
+    const loadGeneration = ++this.vrmLoadGeneration;
     const runLoad = async () => {
+      if (loadGeneration !== this.vrmLoadGeneration) {
+        return;
+      }
+
       if (this.model?.vrm) {
         this.unloadVRM();
       }
@@ -728,6 +734,10 @@ export class Viewer {
       // gltf and vrm
       this.model = new Model(this.camera || new THREE.Object3D());
       await this.model.loadVRM(url, setLoadingProgress);
+      if (loadGeneration !== this.vrmLoadGeneration) {
+        this.model?.unLoadVrm();
+        return;
+      }
       // Temp Disable : WebXR
       // setLoadingProgress("VRM loaded");
       if (!this.model?.vrm) return;
@@ -769,6 +779,10 @@ export class Viewer {
           config("animation_url").indexOf("vrma") > 0
             ? await loadVRMAnimation(config("animation_url"))
             : await loadMixamoAnimation(config("animation_url"), this.model?.vrm);
+        if (loadGeneration !== this.vrmLoadGeneration) {
+          this.unloadVRM();
+          return;
+        }
         if (animation) {
           await this.model.loadAnimation(animation);
           this.model.update(0);
@@ -802,6 +816,13 @@ export class Viewer {
 
     this.vrmLoadQueue = this.vrmLoadQueue.then(runLoad, runLoad);
     return this.vrmLoadQueue;
+  }
+
+  public resetVrmLoadQueue(): void {
+    // ドメイン切替時に古いロードPromiseが詰まっても、次のVRMロードを待たせない。
+    this.vrmLoadGeneration += 1;
+    this.vrmLoadQueue = Promise.resolve();
+    this.unloadVRM();
   }
 
   public unloadVRM(): void {
