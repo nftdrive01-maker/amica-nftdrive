@@ -567,6 +567,10 @@ export default function Home() {
       config('image_avatar_talk_url').trim() !== '';
     return hasVrmConfig || hasImageAvatar ? 'loading' : 'ready';
   });
+  const latestVrmStatusRef = useRef<{
+    state: 'idle' | 'loading' | 'ready' | 'error';
+    url: string;
+  }>({ state: vrmDisplayState, url: '' });
   const vrmConfigSnapshotRef = useRef(`${config('vrm_enabled')}::${config('vrm_url').trim()}`);
   const avatarConfigSnapshotRef = useRef(
     `${config('vrm_enabled')}::${config('vrm_url').trim()}::${config('image_avatar_idle_url').trim()}::${config('image_avatar_talk_url').trim()}`,
@@ -588,6 +592,21 @@ export default function Home() {
 
   const [showStreamWindow, setShowStreamWindow] = useState(false);
   const videoRef = useRef(null);
+
+  const getConfiguredVrmRuntimeUrl = () => {
+    const currentVrmEnabled = config('vrm_enabled') === 'true';
+    const currentVrmUrl = config('vrm_url').trim();
+    return currentVrmEnabled && currentVrmUrl ? buildUrl(currentVrmUrl) : '';
+  };
+
+  const isConfiguredVrmReady = () => {
+    const currentRuntimeUrl = getConfiguredVrmRuntimeUrl();
+    return (
+      currentRuntimeUrl !== '' &&
+      latestVrmStatusRef.current.state === 'ready' &&
+      latestVrmStatusRef.current.url === currentRuntimeUrl
+    );
+  };
 
   const [isARSupported, setIsARSupported] = useState(false);
   const [isVRSupported, setIsVRSupported] = useState(false);
@@ -1260,8 +1279,15 @@ export default function Home() {
         resetConversationState();
       }
 
-      setVrmDisplayState('loading');
-      setAvatarDisplayState('loading');
+      // VRMのreadyイベント直後にドメイン同期が走ることがあるため、
+      // 現在設定中のVRMがすでにreadyならローディングへ戻さない。
+      if (isConfiguredVrmReady()) {
+        setVrmDisplayState('ready');
+        setAvatarDisplayState('ready');
+      } else {
+        setVrmDisplayState(getConfiguredVrmRuntimeUrl() ? 'loading' : 'idle');
+        setAvatarDisplayState('loading');
+      }
       setSelectedDomainId(nextDomainId);
       setDomainDisplayVersion((prev) => prev + 1);
     };
@@ -1350,7 +1376,7 @@ export default function Home() {
         if (vrmConfigSnapshotRef.current !== nextSnapshot) {
           vrmConfigSnapshotRef.current = nextSnapshot;
           const hasVrmConfig = currentVrmEnabled === 'true' && currentVrmUrl !== '';
-          setVrmDisplayState(hasVrmConfig ? 'loading' : 'idle');
+          setVrmDisplayState(hasVrmConfig ? (isConfiguredVrmReady() ? 'ready' : 'loading') : 'idle');
         }
       }
 
@@ -1363,7 +1389,7 @@ export default function Home() {
 
         if (avatarConfigSnapshotRef.current !== nextSnapshot) {
           avatarConfigSnapshotRef.current = nextSnapshot;
-          setAvatarDisplayState('loading');
+          setAvatarDisplayState(isConfiguredVrmReady() ? 'ready' : 'loading');
         }
       }
     };
@@ -1381,13 +1407,29 @@ export default function Home() {
     }
 
     const handleVrmStatusChanged = (event: Event) => {
-      const customEvent = event as CustomEvent<{ state?: 'idle' | 'loading' | 'ready' | 'error' }>;
+      const customEvent = event as CustomEvent<{
+        state?: 'idle' | 'loading' | 'ready' | 'error';
+        url?: string;
+      }>;
       const nextState = customEvent.detail?.state;
+      const eventUrl = customEvent.detail?.url?.trim() || '';
       if (!nextState) {
         return;
       }
 
+      const currentRuntimeUrl = getConfiguredVrmRuntimeUrl();
+      if (eventUrl && currentRuntimeUrl && eventUrl !== currentRuntimeUrl) {
+        return;
+      }
+
+      latestVrmStatusRef.current = { state: nextState, url: eventUrl || currentRuntimeUrl };
       setVrmDisplayState(nextState);
+      if (currentRuntimeUrl) {
+        setAvatarDisplayState(nextState);
+      }
+      if (nextState !== 'loading') {
+        setLauncherStartingDomainId(null);
+      }
     };
 
     window.addEventListener(VRM_STATUS_EVENT, handleVrmStatusChanged as EventListener);
@@ -1576,6 +1618,17 @@ export default function Home() {
   const hasConfiguredVrm = config("vrm_enabled") === "true" && config("vrm_url").trim() !== "";
   const hasConfiguredImageAvatar =
     config("image_avatar_idle_url").trim() !== "" || config("image_avatar_talk_url").trim() !== "";
+
+  useEffect(() => {
+    if (!launcherStartingDomainId) {
+      return;
+    }
+
+    const activeAvatarState = hasConfiguredVrm ? vrmDisplayState : avatarDisplayState;
+    if (activeAvatarState !== 'loading') {
+      setLauncherStartingDomainId(null);
+    }
+  }, [avatarDisplayState, hasConfiguredVrm, launcherStartingDomainId, vrmDisplayState]);
 
   useEffect(() => {
     if (launcherStartingDomainId) {

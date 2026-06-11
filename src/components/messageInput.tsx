@@ -183,59 +183,6 @@ function toAudioBufferBackedFloat32Array(audio: Float32Array): Float32Array {
   return new Float32Array(audio);
 }
 
-// まずは固定サンプルを読み込み、後で外部JSON読み込みに差し替えやすい形にしておく。
-const SAMPLE_PRESENTATION_DECK: PresentationDeck = {
-  deck_id: "ark_i_web_demo",
-  version: "0.1.0",
-  title: "Ark-i Webデモ",
-  description: "Webページを表示しながらArk-iが説明する3ページ構成のデモ",
-  tags: ["Ark-i", "Webデモ", "展示会", "説明会"],
-  slides: [
-    {
-      slide_no: 1,
-      type: "web",
-      url: "https://ark-i.nftdrive.net",
-      display_seconds: 20,
-      notes: "こちらがArk-iのランディングページです。Ark-iは、現場ごとのドメインに応じてAIコンシェルジュを切り替えられる仕組みです。",
-      qa: {
-        keywords: ["ランディングページ", "概要", "Ark-i"],
-        context: "Ark-iのランディングページと全体概要を説明するページです。",
-      },
-    },
-    {
-      slide_no: 2,
-      type: "image",
-      url: "https://ark-i.nftdrive.net/img/screenshot1.png",
-      display_seconds: 20,
-      notes: "この図はArk-iの基本構成です。Amicaがユーザーインターフェースを担当し、BEYOND-CoreがMCPや外部サービスとの接続を担当します。",
-      qa: {
-        keywords: ["構成", "MCP", "BEYOND-Core", "Amica"],
-        context: "Ark-iはAmica、BEYOND-Core、MCP、LLMで構成されます。",
-      },
-    },
-    {
-      slide_no: 3,
-      type: "qa",
-      title: "質疑応答",
-      display_seconds: 20,
-      notes: "以上で説明は終了です。ここからは、Ark-iについてご質問ください。",
-      qa: {
-        keywords: ["質問", "質疑応答", "QA"],
-        context: "ガイド終了後の質疑応答ページです。",
-      },
-    },
-  ],
-  qa_context: {
-    enabled: true,
-    source: "slides_and_notes",
-  },
-  after_guide: {
-    mode: "qa",
-    qa_behavior: "jump_to_related_slide",
-    fallback: "end",
-  },
-};
-
 const chatbotBackendLabels: Record<string, string> = {
   echo: 'Echo',
   arbius_llm: 'Arbius',
@@ -1541,10 +1488,6 @@ export default function MessageInput({
     setDomainMenuOpen(false);
   }
 
-  function openPresentationModal() {
-    startPresentationDeck(SAMPLE_PRESENTATION_DECK);
-  }
-
   function openPresentationSlidePicker() {
     presentationSlideInputRef.current?.click();
   }
@@ -2264,10 +2207,6 @@ export default function MessageInput({
     setUserMessage("");
   }
 
-  function clickedPresentationSpeakButton() {
-    openPresentationModal();
-  }
-
   return (
     <div className={clsx("fixed bottom-2 w-full", domainAccessDialogDomain ? "z-[130]" : "z-20")}>
       <div className="mx-auto max-w-4xl rounded-lg border border-slate-700/60 bg-slate-900/80 p-2 shadow-lg backdrop-blur-md">
@@ -2291,8 +2230,8 @@ export default function MessageInput({
           className={clsx(
             "grid grid-flow-col gap-[8px]",
             selectedDomainGazeEnabled
-              ? "grid-cols-[min-content_min-content_min-content_min-content_min-content_1fr_min-content]"
-              : "grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content]"
+              ? "grid-cols-[min-content_min-content_min-content_min-content_1fr_min-content]"
+              : "grid-cols-[min-content_min-content_min-content_1fr_min-content]"
           )}
         >
           {selectedDomainGazeEnabled && (
@@ -2416,19 +2355,6 @@ export default function MessageInput({
                 </button>
               </div>
             )}
-          </div>
-
-          <div className="flex flex-col justify-center items-center">
-            <button
-              type="button"
-              className="h-8 w-8 rounded-lg bg-secondary text-white hover:bg-secondary-hover active:bg-secondary-press flex items-center justify-center text-base leading-none disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={clickedPresentationSpeakButton}
-              disabled={isChatProcessing}
-              title="入力したテキストをAmicaに発話させる"
-              aria-label="プレゼン発話"
-            >
-              💬
-            </button>
           </div>
 
           <div className="flex w-full flex-col gap-1">
