@@ -136,6 +136,18 @@ const chatbotBackendLabels: Record<string, string> = {
   openrouter: 'OpenRouter',
 };
 
+const CONNECTION_INDICATOR_INLINE_TEXT_MAX = 80;
+const CONNECTION_INDICATOR_DETAIL_TEXT_MAX = 180;
+
+function limitConnectionIndicatorText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
 const VRM_STATUS_EVENT = 'amica:vrm-status';
 const AVATAR_STATUS_EVENT = 'amica:avatar-status';
 const DOMAIN_APPLIED_EVENT = 'amica:domain-applied';
@@ -1863,8 +1875,8 @@ export default function Home() {
             </span>
           )}
             {lastInterceptInfo?.query && (
-              <div className="text-[10px] leading-relaxed text-cyan-100/85 break-all">
-                検索語: {lastInterceptInfo.query}
+              <div className="max-h-[2.8em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-100/85" title={lastInterceptInfo.query}>
+                検索語: {limitConnectionIndicatorText(lastInterceptInfo.query, CONNECTION_INDICATOR_INLINE_TEXT_MAX)}
               </div>
             )}
             {lastInterceptInfo?.requestId && (
@@ -1923,8 +1935,8 @@ export default function Home() {
               </div>
             )}
             {lastInterceptInfo?.query && (
-              <div className="text-[10px] leading-relaxed text-cyan-100/85 break-all">
-                検索語: {lastInterceptInfo.query}
+              <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-100/85" title={lastInterceptInfo.query}>
+                検索語: {limitConnectionIndicatorText(lastInterceptInfo.query, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
               </div>
             )}
             {lastInterceptInfo?.requestId && (
@@ -1938,8 +1950,8 @@ export default function Home() {
             </div>
           )}
           {isMcpRecentlyTriggered && activeMcpQueryText && (
-            <div className="text-[10px] leading-relaxed text-amber-100/90 break-all">
-              検索語: {activeMcpQueryText}
+            <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-amber-100/90" title={activeMcpQueryText}>
+              検索語: {limitConnectionIndicatorText(activeMcpQueryText, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
             </div>
           )}
           </div>
@@ -1955,8 +1967,8 @@ export default function Home() {
               </div>
             )}
             {isMcpRecentlyTriggered && activeMcpQueryText && (
-              <div className="mb-1 rounded border border-amber-300/20 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-100/90 break-all">
-                検索語: {activeMcpQueryText}
+              <div className="mb-1 max-h-[4.6em] max-w-full overflow-hidden rounded border border-amber-300/20 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-100/90" title={activeMcpQueryText}>
+                検索語: {limitConnectionIndicatorText(activeMcpQueryText, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
               </div>
             )}
             {attachedPackDetails.mcpServers.length > 0 ? (
