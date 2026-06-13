@@ -2209,9 +2209,9 @@ export default function MessageInput({
 
   return (
     <div className={clsx("fixed bottom-2 w-full", domainAccessDialogDomain ? "z-[130]" : "z-20")}>
-      <div className="mx-auto max-w-4xl rounded-lg border border-slate-700/60 bg-slate-900/80 p-2 shadow-lg backdrop-blur-md">
+      <div className="mx-auto max-w-4xl rounded-lg border border-white/70 bg-white/82 p-2 shadow-lg shadow-slate-900/10 backdrop-blur-md">
         {selectedDomainGazeDebugUiEnabled && (
-          <div className="mb-1 px-1 text-[10px] text-white/70">
+          <div className="mb-1 px-1 text-[10px] text-slate-600">
             視線: {gazeWakeEnabled ? 'ON' : 'OFF'} / {gazeDebug.status}
             {' '}| hold: {Math.round(gazeDebug.holdProgress * 100)}%
             {' '}| cooldown: {Math.max(0, Math.round(gazeDebug.cooldownRemainingMs))}ms
@@ -2360,13 +2360,13 @@ export default function MessageInput({
           <div className="flex w-full flex-col gap-1">
             {isChatProcessing && (
               <div
-                className="flex items-center gap-2 pl-1 text-[11px] font-medium text-slate-300"
+                className="flex items-center gap-2 pl-1 text-[11px] font-medium text-slate-600"
                 role="status"
                 aria-live="polite"
               >
-                <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-cyan-500" />
                 <span>{t("ai_waiting_for_response", "AIの回答を待機中")}</span>
-                <span className="inline-flex text-cyan-300" aria-hidden="true">
+                <span className="inline-flex text-cyan-600" aria-hidden="true">
                   {[0, 180, 360].map((delay) => (
                     <span
                       key={delay}
@@ -2380,7 +2380,7 @@ export default function MessageInput({
               </div>
             )}
 
-            <div className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/70 px-2 py-1 shadow-sm ring-1 ring-inset ring-slate-700/50 focus-within:ring-slate-500/80">
+            <div className="flex w-full items-center gap-2 rounded-md border border-slate-200/90 bg-white px-2 py-1 shadow-sm ring-1 ring-inset ring-white/80 focus-within:border-cyan-300 focus-within:ring-cyan-200/80">
             {selectedDomainHasChronicle && chronicleEnabledForInput && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
                   CHRONICLE
@@ -2416,7 +2416,7 @@ export default function MessageInput({
                 }
               }}
               disabled={config("chatbot_backend") === "moshi"}
-              className="disabled block w-full border-0 bg-transparent py-0.5 text-white placeholder:text-slate-400 focus:ring-0 sm:text-sm sm:leading-6"
+              className="disabled block w-full border-0 bg-transparent py-0.5 text-slate-800 placeholder:text-slate-400 focus:ring-0 sm:text-sm sm:leading-6"
               value={userMessage}
               autoComplete="off"
             />
@@ -2444,17 +2444,17 @@ export default function MessageInput({
         </div>
 
         {attachedImage && (
-          <div className="mt-2 rounded-md border border-slate-700/60 bg-slate-950/80 px-3 py-2">
+          <div className="mt-2 rounded-md border border-slate-200/90 bg-white/88 px-3 py-2">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-cyan-300">添付画像</div>
-                <div className="truncate text-[11px] text-slate-400">
+                <div className="text-[11px] font-semibold text-cyan-700">添付画像</div>
+                <div className="truncate text-[11px] text-slate-500">
                   {attachedImage.fileName || attachedImage.mimeType || "clipboard image"}
                 </div>
               </div>
               <button
                 type="button"
-                className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="rounded-md px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 onClick={clearAttachment}
               >
                 削除
@@ -2463,7 +2463,7 @@ export default function MessageInput({
             <img
               src={attachedImage.dataUrl}
               alt={attachedImage.fileName || "attached image"}
-              className="mt-2 max-h-24 w-full rounded-md border border-slate-700/60 object-contain"
+              className="mt-2 max-h-24 w-full rounded-md border border-slate-200 object-contain"
             />
           </div>
         )}

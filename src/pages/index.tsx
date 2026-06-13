@@ -589,6 +589,7 @@ export default function Home() {
   );
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isConnectionIndicatorExpanded, setIsConnectionIndicatorExpanded] = useState(true);
+  const connectionIndicatorTouchedRef = useRef(false);
   const [showCompactMobileChatCard, setShowCompactMobileChatCard] = useState(
     () => config("show_compact_mobile_chat_card") === "true"
   );
@@ -1334,6 +1335,16 @@ export default function Home() {
   }, [isMobileViewport, showCompactMobileChatCard]);
 
   useEffect(() => {
+    const collapseTimer = window.setTimeout(() => {
+      if (!connectionIndicatorTouchedRef.current) {
+        setIsConnectionIndicatorExpanded(false);
+      }
+    }, 6500);
+
+    return () => window.clearTimeout(collapseTimer);
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }
@@ -1342,7 +1353,9 @@ export default function Home() {
 
     const applyViewportMode = (matches: boolean) => {
       setIsMobileViewport(matches);
-      setIsConnectionIndicatorExpanded(!matches);
+      if (matches && !connectionIndicatorTouchedRef.current) {
+        setIsConnectionIndicatorExpanded(false);
+      }
     };
 
     applyViewportMode(mediaQuery.matches);
@@ -1815,23 +1828,23 @@ export default function Home() {
 
       <div
         className={clsx(
-          "amica-presentation-external-chrome fixed left-2 top-2 z-20 rounded-lg bg-slate-900/80 backdrop-blur-md shadow-lg border border-slate-700/60 overflow-hidden transition-opacity duration-300",
+          "amica-presentation-external-chrome fixed left-2 top-2 z-20 overflow-hidden rounded-lg border border-white/70 bg-white/82 text-slate-800 shadow-lg shadow-slate-900/10 backdrop-blur-md transition-opacity duration-300",
           isMobileViewport ? "max-w-[220px]" : "max-w-[320px]"
         )}
       >
         {/* ヘッダーバー */}
         <div
           className={clsx(
-            "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold tracking-wide",
+            "flex items-center gap-1.5 border-b px-3 py-1.5 text-[11px] font-bold tracking-wide",
             attachedPackDetails.isReachable
               ? isMcpRecentlyTriggered
-                ? "bg-amber-500/35 text-amber-100"
+                ? "border-amber-200 bg-amber-50/90 text-amber-700"
                 : isMcpChecking
-                  ? "bg-sky-500/30 text-sky-100"
+                  ? "border-sky-200 bg-sky-50/90 text-sky-700"
                 : isInterceptRecentlyTriggered
-                  ? "bg-cyan-500/30 text-cyan-100"
-                : "bg-emerald-600/30 text-emerald-300"
-              : "bg-red-600/30 text-red-300"
+                  ? "border-cyan-200 bg-cyan-50/90 text-cyan-700"
+                : "border-emerald-200 bg-emerald-50/90 text-emerald-700"
+              : "border-red-200 bg-red-50/90 text-red-700"
           )}
         >
           <span
@@ -1839,13 +1852,13 @@ export default function Home() {
               "inline-block h-1.5 w-1.5 rounded-full",
               attachedPackDetails.isReachable
                 ? isMcpRecentlyTriggered
-                  ? "bg-amber-300 animate-pulse"
+                  ? "bg-amber-400 animate-pulse"
                   : isMcpChecking
-                    ? "bg-sky-300 animate-pulse"
+                    ? "bg-sky-400 animate-pulse"
                   : isInterceptRecentlyTriggered
-                    ? "bg-cyan-300 animate-pulse"
-                  : "bg-emerald-400"
-                : "bg-red-400"
+                    ? "bg-cyan-400 animate-pulse"
+                  : "bg-emerald-500"
+                : "bg-red-500"
             )}
           />
           <span className="min-w-0 flex-1 truncate">
@@ -1860,33 +1873,33 @@ export default function Home() {
                   : "接続中"}
           </span>
           {isMcpRecentlyTriggered && (
-            <span className="animate-pulse rounded bg-amber-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-100">
+            <span className="animate-pulse rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-700">
               !
             </span>
           )}
           {!isMcpRecentlyTriggered && isInterceptRecentlyTriggered && (
-            <span className="animate-pulse rounded bg-cyan-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-cyan-100">
+            <span className="animate-pulse rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-extrabold text-cyan-700">
               *
             </span>
           )}
           {!isMcpRecentlyTriggered && !isInterceptRecentlyTriggered && isMcpChecking && (
-            <span className="animate-pulse rounded bg-sky-300/30 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-100">
+            <span className="animate-pulse rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-extrabold text-sky-700">
               ...
             </span>
           )}
             {lastInterceptInfo?.query && (
-              <div className="max-h-[2.8em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-100/85" title={lastInterceptInfo.query}>
+              <div className="max-h-[2.8em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-700/85" title={lastInterceptInfo.query}>
                 検索語: {limitConnectionIndicatorText(lastInterceptInfo.query, CONNECTION_INDICATOR_INLINE_TEXT_MAX)}
               </div>
             )}
             {lastInterceptInfo?.requestId && (
-              <div className="text-[10px] leading-relaxed text-cyan-100/70 break-all">
+              <div className="break-all text-[10px] leading-relaxed text-cyan-700/70">
                 requestId: {lastInterceptInfo.requestId}
               </div>
             )}
           {isMcpRecentlyTriggered && activeMcpStatusText && (
             <span
-              className="hidden max-w-[150px] truncate rounded bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100 md:inline-flex"
+              className="hidden max-w-[150px] truncate rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 md:inline-flex"
               title={`MCP発火: ${activeMcpStatusText}`}
             >
               MCP発火: {activeMcpStatusText}
@@ -1894,63 +1907,66 @@ export default function Home() {
           )}
           {!isMcpRecentlyTriggered && isInterceptRecentlyTriggered && activeInterceptText && (
             <span
-              className="hidden max-w-[180px] truncate rounded bg-cyan-300/20 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 md:inline-flex"
+              className="hidden max-w-[180px] truncate rounded bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 md:inline-flex"
               title={`MCP検出: ${activeInterceptText}`}
             >
               MCP検出: {activeInterceptText}
             </span>
           )}
-          {isMobileViewport && (
+          <>
             <button
               type="button"
               className="-mr-1 inline-flex h-5 w-5 items-center justify-center rounded text-current/90 transition hover:bg-black/10 hover:text-current"
-              onClick={() => setIsConnectionIndicatorExpanded((prev) => !prev)}
+              onClick={() => {
+                connectionIndicatorTouchedRef.current = true;
+                setIsConnectionIndicatorExpanded((prev) => !prev);
+              }}
               aria-label={isConnectionIndicatorExpanded ? '接続情報を折りたたむ' : '接続情報を展開する'}
               aria-expanded={isConnectionIndicatorExpanded}
             >
               {isConnectionIndicatorExpanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
             </button>
-          )}
+          </>
         </div>
 
         {/* コンテンツ */}
         {isConnectionIndicatorExpanded && (
         <div className="px-3 py-2 space-y-2">
-          <div className="space-y-1 rounded-md border border-slate-700/50 bg-slate-950/25 px-2 py-2">
-            <div className="text-[11px] font-semibold text-white/90">
-              ドメイン: <span className="text-white">{selectedDomainLabel}</span>
+          <div className="space-y-1 rounded-md border border-slate-200/80 bg-white/72 px-2 py-2">
+            <div className="text-[11px] font-semibold text-slate-800">
+              ドメイン: <span className="text-slate-950">{selectedDomainLabel}</span>
             </div>
-            <div className="text-[10px] text-white/75">
+            <div className="text-[10px] text-slate-600">
               {selectedDomainChronicleAttached ? 'CHRONICLE接続' : 'CHRONICLE未接続'}
             </div>
-            <div className="text-[10px] leading-relaxed text-white/75">
+            <div className="text-[10px] leading-relaxed text-slate-600">
               STT: {currentSTTLabel} | TTS: {currentTTSLabel}
             </div>
-            <div className="text-[10px] leading-relaxed text-white/75 break-all">
+            <div className="break-all text-[10px] leading-relaxed text-slate-600">
               AI: {currentChatbotLabel}{currentAIModel ? ` (${currentAIModel})` : ''}
             </div>
             {activeInterceptText && (
-              <div className="text-[10px] font-semibold leading-relaxed text-cyan-200/95 break-all">
+              <div className="break-all text-[10px] font-semibold leading-relaxed text-cyan-700">
                 MCP検出: {activeInterceptText}
               </div>
             )}
             {lastInterceptInfo?.query && (
-              <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-100/85" title={lastInterceptInfo.query}>
+              <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-cyan-700/85" title={lastInterceptInfo.query}>
                 検索語: {limitConnectionIndicatorText(lastInterceptInfo.query, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
               </div>
             )}
             {lastInterceptInfo?.requestId && (
-              <div className="text-[10px] leading-relaxed text-cyan-100/70 break-all">
+              <div className="break-all text-[10px] leading-relaxed text-cyan-700/70">
                 requestId: {lastInterceptInfo.requestId}
               </div>
             )}
           {isMcpRecentlyTriggered && activeMcpStatusText && (
-            <div className="text-[10px] font-semibold leading-relaxed text-amber-200/95 break-all">
+            <div className="break-all text-[10px] font-semibold leading-relaxed text-amber-700">
               MCP発火: {activeMcpStatusText}
             </div>
           )}
           {isMcpRecentlyTriggered && activeMcpQueryText && (
-            <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-amber-100/90" title={activeMcpQueryText}>
+            <div className="max-h-[4.6em] max-w-full overflow-hidden text-[10px] leading-relaxed text-amber-700/90" title={activeMcpQueryText}>
               検索語: {limitConnectionIndicatorText(activeMcpQueryText, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
             </div>
           )}
@@ -1958,16 +1974,16 @@ export default function Home() {
 
           {/* MCP セクション */}
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               MCP
             </div>
             {isMcpRecentlyTriggered && (activeMcpDisplayName || activeMcpToolName) && (
-              <div className="mb-1 rounded border border-amber-300/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-100">
+              <div className="mb-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
                 実行: {activeMcpDisplayName || '不明なMCP'}{activeMcpToolName ? ` / ${activeMcpToolName}` : ''}
               </div>
             )}
             {isMcpRecentlyTriggered && activeMcpQueryText && (
-              <div className="mb-1 max-h-[4.6em] max-w-full overflow-hidden rounded border border-amber-300/20 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-100/90" title={activeMcpQueryText}>
+              <div className="mb-1 max-h-[4.6em] max-w-full overflow-hidden rounded border border-amber-200 bg-amber-50/80 px-2 py-1 text-[10px] text-amber-700/90" title={activeMcpQueryText}>
                 検索語: {limitConnectionIndicatorText(activeMcpQueryText, CONNECTION_INDICATOR_DETAIL_TEXT_MAX)}
               </div>
             )}
@@ -1979,11 +1995,11 @@ export default function Home() {
                     className={clsx(
                       "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight",
                       isMcpRecentlyTriggered && isActiveMcpServerName(name)
-                        ? "animate-pulse border border-amber-300/50 bg-amber-400/25 text-amber-100"
+                        ? "animate-pulse border border-amber-300 bg-amber-100 text-amber-700"
                         :
                       attachedPackDetails.isReachable
-                        ? "bg-emerald-500/20 text-emerald-200"
-                        : "bg-red-500/20 text-red-200"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-red-50 text-red-700"
                     )}
                   >
                     {name}
@@ -1997,7 +2013,7 @@ export default function Home() {
 
           {/* ナレッジ セクション */}
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               ナレッジ
             </div>
             {attachedPackDetails.knowledges.length > 0 ? (
@@ -2008,8 +2024,8 @@ export default function Home() {
                     className={clsx(
                       "inline-block rounded px-1.5 py-0.5 text-[11px] font-medium leading-tight",
                       attachedPackDetails.isReachable
-                        ? "bg-emerald-500/20 text-emerald-200"
-                        : "bg-red-500/20 text-red-200"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-red-50 text-red-700"
                     )}
                   >
                     {name}
@@ -2036,7 +2052,7 @@ export default function Home() {
         {showSettingsUi && (
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-900/70 text-white backdrop-blur-md hover:bg-slate-800/80"
+            className="flex h-10 w-10 items-center justify-center rounded-md border border-white/70 bg-white/82 text-slate-700 shadow-sm shadow-slate-900/10 backdrop-blur-md hover:bg-white/95"
             onClick={() => setShowMainMenu((prev) => !prev)}
             aria-label="メニューを開閉"
             aria-expanded={showMainMenu}
@@ -2048,7 +2064,7 @@ export default function Home() {
         {selectedDomainGazeEnabled && (
           <button
             type="button"
-            className="mt-1 flex h-8 w-10 items-center justify-center rounded-md bg-slate-900/60 text-white backdrop-blur-md hover:bg-slate-800/80"
+            className="mt-1 flex h-8 w-10 items-center justify-center rounded-md border border-white/70 bg-white/78 text-slate-700 shadow-sm shadow-slate-900/10 backdrop-blur-md hover:bg-white/95"
             title="視線キャリブレーション"
             aria-label="視線キャリブレーション"
             onClick={() => {
@@ -2065,10 +2081,10 @@ export default function Home() {
           <button
             type="button"
             className={clsx(
-              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
               launcherEntered
-                ? "bg-slate-900/60 hover:bg-slate-800/80"
-                : "bg-sky-700/70 hover:bg-sky-600/80"
+                ? "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
+                : "border-sky-200 bg-sky-100/85 text-sky-700 hover:bg-sky-50"
             )}
             title="ランチャーへ戻る"
             aria-label="ランチャーへ戻る"
@@ -2082,10 +2098,10 @@ export default function Home() {
           <button
             type="button"
             className={clsx(
-              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
               showChatMode
-                ? "bg-emerald-700/70 hover:bg-emerald-600/80"
-                : "bg-slate-900/60 hover:bg-slate-800/80"
+                ? "border-emerald-200 bg-emerald-100/85 text-emerald-700 hover:bg-emerald-50"
+                : "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
             )}
             title={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
             aria-label={showChatMode ? "チャットモードをオフ" : "チャットモードをオン"}
@@ -2100,10 +2116,10 @@ export default function Home() {
           <button
             type="button"
             className={clsx(
-              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
               showCompactMobileChatCard
-                ? "bg-emerald-700/70 hover:bg-emerald-600/80"
-                : "bg-slate-900/60 hover:bg-slate-800/80"
+                ? "border-emerald-200 bg-emerald-100/85 text-emerald-700 hover:bg-emerald-50"
+                : "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
             )}
             title={showCompactMobileChatCard ? "対話優先表示をオフ" : "対話優先表示をオン"}
             aria-label={showCompactMobileChatCard ? "対話優先表示をオフ" : "対話優先表示をオン"}
@@ -2117,10 +2133,10 @@ export default function Home() {
         <button
           type="button"
           className={clsx(
-            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+            "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
             showHistory
-              ? "bg-cyan-700/70 hover:bg-cyan-600/80"
-              : "bg-slate-900/60 hover:bg-slate-800/80"
+              ? "border-cyan-200 bg-cyan-100/85 text-cyan-700 hover:bg-cyan-50"
+              : "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
           )}
           title={showHistory ? "履歴を閉じる" : "履歴を開く"}
           aria-label={showHistory ? "履歴を閉じる" : "履歴を開く"}
@@ -2134,10 +2150,10 @@ export default function Home() {
           <button
             type="button"
             className={clsx(
-              "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+              "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
               muted
-                ? "bg-amber-700/70 hover:bg-amber-600/80"
-                : "bg-slate-900/60 hover:bg-slate-800/80"
+                ? "border-amber-200 bg-amber-100/85 text-amber-700 hover:bg-amber-50"
+                : "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
             )}
             title={muted ? "ミュートを解除" : "ミュートにする"}
             aria-label={muted ? "ミュートを解除" : "ミュートにする"}
@@ -2151,10 +2167,10 @@ export default function Home() {
         <button
           type="button"
           className={clsx(
-            "mt-1 flex h-8 w-10 items-center justify-center rounded-md text-white backdrop-blur-md",
+            "mt-1 flex h-8 w-10 items-center justify-center rounded-md border shadow-sm shadow-slate-900/10 backdrop-blur-md",
             informationView
-              ? "bg-violet-700/70 hover:bg-violet-600/80"
-              : "bg-slate-900/60 hover:bg-slate-800/80"
+              ? "border-violet-200 bg-violet-100/85 text-violet-700 hover:bg-violet-50"
+              : "border-white/70 bg-white/78 text-slate-700 hover:bg-white/95"
           )}
           title={informationView ? "インフォメーションを閉じる" : "インフォメーションを開く"}
           aria-label={informationView ? "インフォメーションを閉じる" : "インフォメーションを開く"}
@@ -2168,7 +2184,7 @@ export default function Home() {
         </button>
 
         {showMainMenu && (
-        <div className="grid grid-flow-col gap-[8px] place-content-end mt-2 bg-slate-800/40 rounded-md backdrop-blur-md shadow-sm">
+        <div className="mt-2 grid grid-flow-col place-content-end gap-[8px] rounded-md border border-white/70 bg-white/82 shadow-sm shadow-slate-900/10 backdrop-blur-md">
           <div className='flex flex-col justify-center items-center p-1 space-y-3'>
             {showSettingsUi && (
               <MenuButton
