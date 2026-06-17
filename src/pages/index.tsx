@@ -65,6 +65,7 @@ import { isTauri } from '@/utils/isTauri';
 import { langs } from '@/i18n/langs';
 import { VrmStoreProvider } from "@/features/vrmStore/vrmStoreContext";
 import { AmicaLifeContext } from "@/features/amicaLife/amicaLifeContext";
+import { useStreamingChat } from "@/features/streaming/useStreamingChat";
 import { ChatModeText } from "@/components/chatModeText";
 import { HistoryPanel } from "@/components/historyPanel";
 import { ImageAvatar } from "@/components/imageAvatar";
@@ -564,6 +565,16 @@ export default function Home() {
   const [selectedDomainId, setSelectedDomainId] = useState(() => config('injection_default_domain') || 'default');
   const selectedDomainIdRef = useRef(selectedDomainId);
   const [selectedDomainGazeEnabled, setSelectedDomainGazeEnabled] = useState(true);
+
+  // YouTubeライブ配信連携（配信OFF時は完全に無動作）
+  useStreamingChat({
+    active: config('injection_tool_enabled')?.toLowerCase() !== 'false',
+    domainId: (selectedDomainId || config('injection_default_domain') || 'default').trim(),
+    bot,
+    amicaLife,
+    busy: chatProcessing || chatSpeaking,
+    injectionBaseUrl: config('injection_tool_url') || '/api/injection',
+  });
   const [selectedDomainLabel, setSelectedDomainLabel] = useState(() => config('injection_default_domain_label') || 'デフォルト');
   const [selectedDomainChronicleAttached, setSelectedDomainChronicleAttached] = useState(false);
   const [effectiveTTSBackend, setEffectiveTTSBackend] = useState(() => config('tts_backend'));

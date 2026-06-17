@@ -29,6 +29,7 @@ const ALLOWED_ROUTE_PATTERNS: Array<{
   { method: 'POST', pattern: /^public\/domain-access\/login$/ },
   { method: 'GET', pattern: /^public\/sessions$/ },
   { method: 'POST', pattern: /^public\/sessions$/ },
+  { method: 'GET', pattern: /^streaming\/poll$/ },
 ];
 
 function isAllowedProxyRoute(method: string, pathSegments: string[]): boolean {
