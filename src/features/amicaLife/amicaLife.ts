@@ -31,6 +31,8 @@ export class AmicaLife {
   public isSleep: boolean;
   private isSettingOff: boolean;
   private isPause: boolean;
+  // ガイド/質疑応答モード表示中はAmicaLifeを停止させるためのフラグ
+  private isPresentationActive: boolean;
   private isProcessingEventRunning?: boolean;
   private isProcessingIdleRunning?: boolean;
 
@@ -44,6 +46,7 @@ export class AmicaLife {
     this.isSleep = false;
     this.isPause = false;
     this.isSettingOff = false;
+    this.isPresentationActive = false;
     this.isProcessingEventRunning = false;
     this.isProcessingIdleRunning = false;
   }
@@ -274,11 +277,24 @@ export class AmicaLife {
 
   // Function to resume the processingEvent loop from pause
   private async checkResume(): Promise<boolean> {
-    if (this.isPause === true && !this.isSleep && this.isSettingOff) {
+    if (this.isPause === true && !this.isSleep && this.isSettingOff && !this.isPresentationActive) {
       this.resume();
       return true;
     }
     return false;
+  }
+
+  // ガイド/質疑応答モードの表示・非表示に合わせてAmicaLifeを停止/再開する。
+  // 表示中(active=true)は停止し、checkResumeでも再開されないようにする。
+  public setPresentationActive(active: boolean) {
+    if (active) {
+      this.isPresentationActive = true;
+      this.pause();
+    } else {
+      this.isPresentationActive = false;
+      this.chat?.updateAwake();
+      this.resume();
+    }
   }
 
   // Function to pause/resume the loop when setting page is open/close

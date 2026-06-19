@@ -575,6 +575,11 @@ export default function MessageInput({
     };
   }, [presentationModalOpen]);
 
+  // ガイドモーダル（ガイド再生／質疑応答モード）表示中はAmicaLifeを停止する
+  useEffect(() => {
+    amicaLife.setPresentationActive(presentationModalOpen);
+  }, [amicaLife, presentationModalOpen]);
+
   useEffect(() => {
     if (!presentationModalOpen || !presentationDeck || !currentPresentationSlide) {
       return;
@@ -1572,35 +1577,42 @@ export default function MessageInput({
     }
 
     bot.bubbleMessage('user', trimmedQuestion);
+    setPresentationAutoPlay(false);
+    setPresentationQaQuestion('');
+
     const match = findRelatedGuideSlide(presentationDeck, trimmedQuestion);
 
     if (match) {
+      // 関連ページへ切り替える（切替時の自動読み上げは抑止する）
       const slideTitle = match.slide.title || `ページ ${match.slide.slide_no}`;
-      const guideJumpReason = `ユーザーが「${trimmedQuestion}」について質問したため、関連する「${slideTitle}」へ切り替えます。`;
       lastSpokenPresentationSlideRef.current = `${presentationDeck.deck_id}:${match.index}:${match.slide.slide_no}`;
       showPresentationSlide(match.index);
-      setPresentationAutoPlay(false);
-      const answerText = [
-        guideJumpReason,
-        match.slide.qa?.context,
-        match.slide.notes,
+
+      const guideContext = [
+        presentationDeck.title ? `ガイド: ${presentationDeck.title}` : '',
+        presentationDeck.description ? `概要: ${presentationDeck.description}` : '',
+        `関連ページ: ${slideTitle}`,
+        match.slide.qa?.context ? `ページの補足: ${match.slide.qa.context}` : '',
+        match.slide.notes ? `ページの説明: ${match.slide.notes}` : '',
       ].filter(Boolean).join('\n');
-      bot.speakPresentationText(answerText, selectedDomain);
-      setPresentationQaQuestion('');
+      // コンテキストをそのまま読み上げず、説明する側として回答させる
+      void bot.receiveGuideQaQuestion(trimmedQuestion, guideContext, selectedDomain);
       return true;
     }
 
-    if (presentationDeck.after_guide?.fallback === 'end') {
-      setPresentationGuideQaMode(false);
-      setPresentationAutoPlay(false);
-      setPresentationModalOpen(false);
-      setPresentationQaQuestion('');
-      bot.speakAssistantReaction('関連するガイドページが見つからなかったため、通常チャットへ戻ります。', selectedDomain);
-      bot.receiveMessageFromUser(trimmedQuestion, false, selectedDomain);
-      return true;
-    }
-
-    return false;
+    // 関連ページが見つからない場合も、モーダルは閉じずに質疑応答モードのまま。
+    // 表示中ページとガイド全体を根拠に、説明する側として回答させる。
+    // 終了は「閉じる」ボタンまたは Esc キーでのみ行う。
+    const currentSlide = presentationDeck.slides[presentationSlideIndex] || null;
+    const fallbackContext = [
+      presentationDeck.title ? `ガイド: ${presentationDeck.title}` : '',
+      presentationDeck.description ? `概要: ${presentationDeck.description}` : '',
+      currentSlide?.title ? `表示中ページ: ${currentSlide.title}` : '',
+      currentSlide?.qa?.context ? `表示中ページの補足: ${currentSlide.qa.context}` : '',
+      currentSlide?.notes ? `表示中ページの説明: ${currentSlide.notes}` : '',
+    ].filter(Boolean).join('\n');
+    void bot.receiveGuideQaQuestion(trimmedQuestion, fallbackContext, selectedDomain);
+    return true;
   }
 
   function submitGuideQaQuestionFromModal() {

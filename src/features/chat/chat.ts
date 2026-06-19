@@ -851,6 +851,51 @@ export class Chat {
     });
   }
 
+  // 質疑応答モードで、スライド内容を根拠にしながら「説明する側」としてLLMに回答させる。
+  // コンテキストをそのまま読み上げず、要点を踏まえて自分の言葉で答えるよう指示する。
+  // 呼び出し元で先に bubbleMessage('user', ...) 済みであることを前提とする。
+  public async receiveGuideQaQuestion(question: string, guideContext: string, domainId?: string): Promise<void> {
+    const trimmedQuestion = (question || '').trim();
+    if (!trimmedQuestion) {
+      return;
+    }
+
+    this.setChatProcessing?.(true);
+    const effectiveDomainId = (domainId || this.currentUserDomainId || resolveActiveDomainId()).trim() || 'default';
+    this.currentUserDomainId = effectiveDomainId;
+
+    await this.interrupt();
+    await wait(0);
+
+    const basePrompt = config('system_prompt');
+    const contextText = (guideContext || '').trim();
+    const guideInstruction = [
+      '# 現在の状況',
+      'あなたはスライド資料を使って説明しているプレゼンターです。聞き手から質問を受けています。',
+      '',
+      '# 回答ルール',
+      '- 以下の「スライドの内容」を根拠に、質問へ口頭で分かりやすく回答する。',
+      '- スライドの文章をそのまま読み上げない。要点を踏まえ、自分の言葉で説明する。',
+      '- 説明する側として、まず結論を述べ、必要に応じて補足する。',
+      '- スライドに無いことは断定せず、分かる範囲で誠実に答える。',
+      '- 日本語の話し言葉で簡潔に答える。',
+      contextText ? `\n# スライドの内容\n${contextText}` : '',
+    ].join('\n');
+
+    const systemPrompt = `${basePrompt}\n\n${guideInstruction}`;
+
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      ...this.messageList!,
+      { role: 'user', content: trimmedQuestion },
+    ];
+
+    const streamResult = await this.makeAndHandleStream(messages, effectiveDomainId, false);
+    if (typeof streamResult === 'string') {
+      this.setChatProcessing?.(false);
+    }
+  }
+
   public bubbleMessage(role: Role, text: string, attachment?: ChatImageAttachment) {
     // TODO: currentUser & Assistant message should be contain the message with emotion in it
 
